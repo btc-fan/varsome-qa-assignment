@@ -1,0 +1,63 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# ---- Test / report artifacts ----
+reports/
+!reports/.gitkeep
+.pytest_cache/
+.cache/
+allure-results/
+allure-report/
+screenshots/
+*.png
+*.log
+junit*.xml
+coverage.xml
+htmlcov/
+.coverage
+.coverage.*
+
+# ---- Selenium / driver noise ----
+geckodriver.log
+chromedriver.log
+*.crdownload
+
+# ---- Secrets / local config ----
+.env
+.env.local
+*.local
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ---- AI / Claude (all kept local-only, never committed) ----
+.omc/
+.claude/
+CLAUDE.md
+.mcp.json
+AGENTS.md
+.cursor/
+.cursorrules
+.aider*
+.github/copilot-instructions.md
+*.ai.md
