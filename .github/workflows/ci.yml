@@ -6,7 +6,7 @@ on:
     branches: [main]
   pull_request:
 
-# Needed to publish the Allure report to GitHub Pages and to comment on PRs.
+# Needed to publish the HTML report to GitHub Pages and to comment on PRs.
 permissions:
   contents: write
   pull-requests: write
@@ -44,36 +44,28 @@ jobs:
       - run: pip install -r requirements.txt
 
       # Chrome is preinstalled on ubuntu-latest; Selenium Manager resolves the driver.
-      - name: Run suite (headed via xvfb)
+      # Headless in CI (HEADLESS defaults true — no committed .env). The live VarSome
+      # tests are skipped here anyway; if run with an account they can go headed/xvfb.
+      - name: Run suite (headless)
         id: pytest
         continue-on-error: true # keep going so the report still publishes on failure
-        env:
-          HEADLESS: "false"
-        run: xvfb-run -a pytest -m regression --reruns 2 --reruns-delay 3
+        run: pytest -m regression --reruns 2 --reruns-delay 3
 
-      - name: Upload raw reports (allure-results + screenshots)
+      # The HTML report is self-contained (screenshots + logs embedded). Rename it to
+      # index.html so the per-run Pages folder opens it directly.
+      - name: Prepare report site
+        if: always()
+        run: |
+          mkdir -p site
+          cp reports/report.html site/index.html
+
+      - name: Upload HTML report (downloadable — works regardless of Pages/domain)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reports
-          path: reports/
+          name: report
+          path: reports/report.html
           if-no-files-found: warn
-
-      # ---- Allure report -> GitHub Pages -----------------------------------
-      # Generate the static Allure site with the CLI (needs Java). Avoids the
-      # unmaintained Docker action whose base image was removed from Docker Hub.
-      - name: Set up Java (Allure CLI needs it)
-        if: always()
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Generate Allure report
-        if: always()
-        run: |
-          npm install -g allure-commandline
-          allure generate reports/allure-results --clean -o allure-report
 
       - name: Publish report to GitHub Pages (per-run folder)
         if: always()
@@ -81,7 +73,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: allure-report
+          publish_dir: site
           destination_dir: ${{ github.run_number }}
           keep_files: true
 
@@ -90,23 +82,24 @@ jobs:
         if: always() && github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          header: allure-report
+          header: test-report
           message: |
             ### VarSome UI test report
 
             | | |
             |---|---|
             | **Result** | ${{ steps.pytest.outcome == 'success' && '✅ passed' || '❌ failed' }} |
-            | **Report** | https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ github.run_number }}/ |
+            | **Report (Pages)** | https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ github.run_number }}/ |
+            | **Report (download)** | [artifact `report`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
             | **Branch** | `${{ github.head_ref }}` |
             | **Commit** | `${{ github.sha }}` |
-            | **Environment** | ubuntu-latest · Python 3.12 · Chrome (headed/xvfb) |
+            | **Environment** | ubuntu-latest · Python 3.12 · Chrome (headless) |
             | **Run** | [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
             | **When** | ${{ github.event.head_commit.timestamp || github.run_started_at }} |
 
-            > Note: live VarSome rate-limits anonymous users (~1 request/day/IP) and
-            > shows reCAPTCHA to datacenter IPs, so a CI run may fail on the live gate
-            > rather than a real regression. See `README.md` → Live-site obstacles.
+            > If the Pages link doesn't open, use the **download** artifact (a
+            > self-contained HTML report). Live VarSome tests are skipped in CI
+            > (rate limit + reCAPTCHA) — see `README.md` → Live-site obstacles.
 
       # Reflect the real test result as the job status (after reporting ran).
       - name: Fail job if tests failed

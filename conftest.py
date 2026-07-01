@@ -23,27 +23,25 @@ def driver():
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
-    """Attach a screenshot to the report whenever a test phase fails."""
+    """On a failed test, save a screenshot and embed it in the HTML report."""
     outcome = yield
     report = outcome.get_result()
-    if report.when != "call" or report.passed:
-        return
-    drv = item.funcargs.get("driver")
-    if drv is None:
-        return
-    _SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-    path = _SCREENSHOT_DIR / f"FAIL_{item.name}_{stamp}.png"
-    try:
-        drv.save_screenshot(str(path))
-        log.error("Saved failure screenshot: %s", path)
-        try:
-            import allure
+    extras = getattr(report, "extras", [])
 
-            allure.attach.file(
-                str(path), name=item.name, attachment_type=allure.attachment_type.PNG
-            )
-        except Exception:  # noqa: BLE001 - allure optional
-            pass
-    except Exception as exc:  # noqa: BLE001
-        log.error("Could not capture screenshot: %s", exc)
+    if report.when == "call" and not report.passed:
+        drv = item.funcargs.get("driver")
+        if drv is not None:
+            _SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+            stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+            path = _SCREENSHOT_DIR / f"FAIL_{item.name}_{stamp}.png"
+            try:
+                drv.save_screenshot(str(path))
+                log.error("Saved failure screenshot: %s", path)
+                # Embed inline (base64) so the self-contained HTML report shows it.
+                import pytest_html
+
+                extras.append(pytest_html.extras.image(drv.get_screenshot_as_base64()))
+            except Exception as exc:  # noqa: BLE001
+                log.error("Could not capture screenshot: %s", exc)
+
+    report.extras = extras
