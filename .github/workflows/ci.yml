@@ -1,12 +1,12 @@
 name: CI
 
-# Run on every push to main and on pull requests.
 on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened]
 
-# contents: write -> push the report to the gh-pages branch. pull-requests: write -> PR comment.
+# contents: write -> push report to gh-pages. pull-requests: write -> PR comment.
 permissions:
   contents: write
   pull-requests: write
@@ -33,6 +33,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     needs: lint
+    env:
+      BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -43,17 +45,11 @@ jobs:
 
       # Headless in CI (HEADLESS defaults true — no committed .env). The live VarSome
       # tests are skipped here anyway (rate limit + reCAPTCHA).
-      - name: Run suite (headless)
-        id: pytest
-        continue-on-error: true # keep going so the report still publishes on failure
-        run: pytest -m regression --reruns 2 --reruns-delay 3
-
-      # Self-contained HTML report (screenshots + logs embedded). index.html = folder root.
-      - name: Build report site
-        if: always()
+      - name: Run tests and generate HTML report
         run: |
-          mkdir -p site
-          cp reports/report.html site/index.html
+          set +e
+          pytest -m regression --reruns 2 --reruns-delay 3
+          echo "PYTEST_EXIT_CODE=$?" >> "$GITHUB_ENV"
 
       - name: Upload HTML report (downloadable)
         if: always()
@@ -63,40 +59,58 @@ jobs:
           path: reports/report.html
           if-no-files-found: warn
 
-      # Publish to the gh-pages branch under a per-run folder (Pages source = branch).
-      # keep_files preserves previous runs, so every run has a permanent URL.
-      - name: Publish report to gh-pages
+      # Publish to the gh-pages branch under reports/<branch>/<run>/index.html.
+      # reports/ is gitignored, so report.html survives the branch switch; we also
+      # stash a copy to be safe.
+      - name: Deploy report to gh-pages
         if: always()
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: site
-          destination_dir: ${{ github.run_number }}
-          keep_files: true
+        run: |
+          if [ ! -f reports/report.html ]; then echo "no report, skip"; exit 0; fi
+          cp reports/report.html /tmp/index.html
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin gh-pages || true
+          git checkout gh-pages || git checkout --orphan gh-pages
+          DIR="reports/${BRANCH_NAME}/${{ github.run_number }}"
+          mkdir -p "$DIR"
+          cp /tmp/index.html "$DIR/index.html"
+          git add "$DIR/index.html"
+          git commit -m "report: ${BRANCH_NAME} run ${{ github.run_number }}"
+          git push origin gh-pages
 
       - name: Comment report link on PR
         if: always() && github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: actions/github-script@v7
+        env:
+          BRANCH_NAME: ${{ env.BRANCH_NAME }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ID: ${{ github.run_id }}
+          PYTEST_EXIT_CODE: ${{ env.PYTEST_EXIT_CODE }}
         with:
-          header: test-report
-          recreate: true # delete the old one and post fresh, so it is the last comment
-          message: |
-            ### VarSome UI test report
-
-            | | |
-            |---|---|
-            | **Result** | ${{ steps.pytest.outcome == 'success' && '✅ passed' || '❌ failed' }} |
-            | **Report** | https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ github.run_number }}/ |
-            | **Branch** | `${{ github.head_ref }}` |
-            | **Commit** | `${{ github.sha }}` |
-            | **Environment** | ubuntu-latest · Python 3.12 · Chrome (headless) |
-            | **Run** | [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
-            | **When** | ${{ github.run_started_at }} |
-
-            > Live VarSome tests are skipped in CI (rate limit + reCAPTCHA); the report
-            > above is this run's HTML report published to GitHub Pages.
+          script: |
+            const { BRANCH_NAME, RUN_NUMBER, RUN_ID, PYTEST_EXIT_CODE } = process.env;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const url = `https://${owner}.github.io/${repo}/reports/${BRANCH_NAME}/${RUN_NUMBER}/index.html`;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${RUN_ID}`;
+            const passed = PYTEST_EXIT_CODE === "0";
+            const body = [
+              "### VarSome UI test report",
+              "",
+              `- **Result:** ${passed ? "✅ passed" : "❌ failed"}`,
+              `- **Report:** [View HTML report](${url})`,
+              `- **Branch:** \`${BRANCH_NAME}\``,
+              `- **Commit:** \`${context.sha}\``,
+              `- **Environment:** ubuntu-latest · Python 3.12 · Chrome (headless)`,
+              `- **Run:** [#${RUN_NUMBER}](${runUrl})`,
+              `- **When:** ${new Date().toISOString()}`,
+              "",
+              "> Live VarSome tests are skipped in CI (rate limit + reCAPTCHA).",
+            ].join("\n");
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: context.issue.number, body,
+            });
 
       - name: Fail job if tests failed
-        if: always() && steps.pytest.outcome != 'success'
+        if: always() && env.PYTEST_EXIT_CODE != '0'
         run: exit 1
