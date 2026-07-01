@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from config.test_data import GERMLINE_SCENARIOS, GermlineSample
+from config.test_data import EXPECTED_CARD_CONTENT, GERMLINE_SCENARIOS, GermlineSample
 from locators.locators import ResultsLocators
 from pages.home_page import HomePage
 from pages.results_page import ResultsPage
