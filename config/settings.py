@@ -1,4 +1,5 @@
 """Centralized, environment-driven configuration. No magic numbers in test/page code."""
+
 from __future__ import annotations
 
 import os

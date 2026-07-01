@@ -1,4 +1,5 @@
 """Pytest fixtures and failure hooks."""
+
 from __future__ import annotations
 
 import datetime as dt

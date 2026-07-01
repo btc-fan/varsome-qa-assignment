@@ -1,100 +1,137 @@
 """Single source of truth for selectors.
 
-CAUTION: VarSome is a third-party app whose DOM was not crawlable from the build
-environment. Selectors below are resilient best-effort (text / aria / placeholder
-based) and MUST be verified against the live DOM before first green run. Each block
-flagged VERIFY is the most likely to need adjustment. Update here only — never inline.
+All locators below were verified against the live VarSome DOM (hg38) by walking the
+six documented steps via the selenium MCP. Anchor priority used: stable `id` >
+`data-testid` > scoped CSS / label-text XPath. Volatile hashes (CSS-module suffixes,
+react-select `css-*` and styled-components `-sc-*` suffixes) are never used as the
+sole anchor — only stable name prefixes (`ColoredPill__StyledPill`) or section ids.
+
+Update here only — never inline a selector in a page object or test.
 """
+
 from selenium.webdriver.common.by import By
 
 Locator = tuple[str, str]
 
 
 class HomeLocators:
-    # VERIFY: search input placeholder text may differ slightly.
-    SEARCH_INPUT: Locator = (
-        By.XPATH,
-        "//input[contains(@placeholder, 'gene') or contains(@placeholder, 'variant')]",
-    )
+    # id="search" name="query" — stable id anchor (placeholder text is volatile).
+    SEARCH_INPUT: Locator = (By.ID, "search")
+    # Custom dropdown widget; the selected value div renders "hg38" / "hg19".
+    # Scoped to the search form so it survives other ".select-selected" widgets.
     GENOME_SELECTOR: Locator = (
-        By.XPATH,
-        "//*[self::button or self::div or self::span]"
-        "[contains(normalize-space(.), 'hg38') or contains(normalize-space(.), 'hg19')]",
+        By.CSS_SELECTOR,
+        "#variant-search-form .select-selected",
     )
-    SEARCH_BUTTON: Locator = (
-        By.XPATH,
-        "//button[@type='submit' or contains(translate(., 'SEARCH', 'search'), 'search')]",
-    )
+    SEARCH_BUTTON: Locator = (By.ID, "varsome-search-btn")
+
+    @staticmethod
+    def genome_option(genome: str) -> Locator:
+        # Option inside the open custom dropdown; scoped to the search form so it
+        # never matches another '.select-item' widget. Exact text isolates hg38/hg19.
+        return (
+            By.XPATH,
+            "//*[@id='variant-search-form']"
+            f"//div[contains(@class,'select-item')][normalize-space(text())='{genome}']",
+        )
+
+
+class SecurityValidationLocators:
+    """Anti-bot interstitial shown after submitting the search. Must click Proceed
+    to continue to the results page (reCAPTCHA-protected, but the button proceeds)."""
+
+    PROCEED_BUTTON: Locator = (By.ID, "proceedBtn")
 
 
 class SampleModalLocators:
-    # VERIFY: the modal container + tab/field selectors are the highest-risk block.
+    # Modal container, anchored on its title so it never matches another VarSome modal.
     MODAL: Locator = (
         By.XPATH,
-        "//*[contains(@class,'modal') or @role='dialog']"
-        "[.//*[contains(normalize-space(.), 'Optional Sample Information')]]",
+        "//div[contains(@class,'modal-container-window')]"
+        "[.//*[contains(normalize-space(.),'Optional Sample Information')]]",
     )
+    # Neutral element inside the modal; clicked to blur a react-select and close its
+    # menu (the phenotype multi-select keeps its menu open after a pick).
+    MODAL_TITLE: Locator = (
+        By.XPATH,
+        "//*[normalize-space(text())='Optional Sample Information']",
+    )
+    # Germline / Somatic toggle. Active tab carries 'tw-bg-primary'; exact text isolates it.
     GERMLINE_TAB: Locator = (
         By.XPATH,
-        "//*[self::button or self::a or @role='tab'][normalize-space()='Germline']",
+        "//div[contains(@class,'tw-cursor-pointer') and normalize-space(text())='Germline']",
     )
-    PHENOTYPE_INPUT: Locator = (
+    # The active Germline tab specifically — same element when it carries 'tw-bg-primary'.
+    GERMLINE_TAB_ACTIVE: Locator = (
         By.XPATH,
-        "//label[contains(.,'Phenotype')]/following::input[1] "
-        "| //input[contains(@placeholder,'henotype')]",
+        "//div[contains(@class,'tw-cursor-pointer') and contains(@class,'tw-bg-primary')"
+        " and normalize-space(text())='Germline']",
     )
-    SEX_INPUT: Locator = (
-        By.XPATH,
-        "//label[contains(.,'Sex')]/following::*[self::select or @role='combobox'][1]",
+    # Each field is a react-select scoped by a stable section id. Selecting requires
+    # clicking the control first (see page object).
+    PHENOTYPE_CONTROL: Locator = (
+        By.CSS_SELECTOR,
+        "#germline-modal-phenotypes [class*='-control']",
     )
+    SEX_CONTROL: Locator = (By.CSS_SELECTOR, "#germline-modal-sex [class*='-control']")
+    # Plain text input (NOT a react-select). Label-anchored because the section id
+    # `germline-modal-onset-age` is reused by the Family Segregation block.
     AGE_INPUT: Locator = (
         By.XPATH,
-        "//label[contains(.,'Age')]/following::input[1] "
-        "| //input[contains(@placeholder,'ge at onset')]",
+        "//*[normalize-space(text())='Age at onset']/following::input[1]",
     )
-    ETHNICITY_INPUT: Locator = (
-        By.XPATH,
-        "//label[contains(.,'Ethnicity')]/following::*[self::select or @role='combobox' or self::input][1]",
+    ETHNICITY_CONTROL: Locator = (
+        By.CSS_SELECTOR,
+        "#germline-modal-ethnicity [class*='-control']",
     )
+    # Bottom "Search" submit; last() avoids any in-field search control.
     MODAL_SEARCH_BUTTON: Locator = (
         By.XPATH,
-        "(//*[contains(@class,'modal') or @role='dialog']"
-        "//button[contains(translate(.,'SEARCH','search'),'search')])[last()]",
+        "(//div[contains(@class,'modal-container-window')]"
+        "//button[normalize-space()='Search'])[last()]",
     )
 
     @staticmethod
     def dropdown_option(text: str) -> Locator:
-        # VERIFY: autocomplete option container class.
+        # react-select option: class ends in '-option' (e.g. css-yt9ioa-option),
+        # no role attribute. Exact text match avoids partial hits (e.g. "Cancer of...").
         return (
             By.XPATH,
-            f"//*[@role='option' or contains(@class,'option') or contains(@class,'suggestion')]"
-            f"[contains(normalize-space(.), \"{text}\")]",
+            f"//div[contains(@class,'-option')][normalize-space()=\"{text}\"]",
         )
 
 
+class OverlayLocators:
+    """Nuisance overlays that intercept clicks / steal focus; dismiss when present."""
+
+    COOKIE_ACCEPT: Locator = (By.ID, "onetrust-accept-btn-handler")
+    # The release-notes popup ("VarSome & VarSome Clinical v...") is a HubSpot CTA
+    # rendered inside this iframe; its close button lives INSIDE the iframe.
+    RELEASE_NOTES_IFRAME: Locator = (By.CSS_SELECTOR, 'iframe[title="Popup CTA"]')
+    RELEASE_NOTES_CLOSE: Locator = (By.ID, "interactive-close-button")
+
+
 class ResultsLocators:
+    # "General Information" header leaf inside the variantDetails card.
     GENERAL_INFORMATION: Locator = (
         By.XPATH,
-        "//*[contains(normalize-space(.), 'General Information')]",
+        "//*[normalize-space(text())='General Information']",
     )
-    GERMLINE_CLASSIFICATION_CARD: Locator = (
-        By.XPATH,
-        "//*[contains(@class,'card') or @role='region']"
-        "[.//*[contains(normalize-space(.), 'Germline Classification')]]",
-    )
-    GERMLINE_EXPAND_TOGGLE: Locator = (
-        By.XPATH,
-        "//*[contains(normalize-space(.), 'Germline Classification')]"
-        "/ancestor-or-self::*[1]//*[self::button or @role='button' or contains(@class,'expand')]",
-    )
+    # Germline Classification card in the top info panel = the ACMG card.
+    GERMLINE_CLASSIFICATION_CARD: Locator = (By.CSS_SELECTOR, '[data-testid="acmg"]')
+    # Step-4 evidence sections, anchored on stable data-testid cards.
+    CLINVAR: Locator = (By.CSS_SELECTOR, '[data-testid="clinVar"]')
+    LOVD: Locator = (By.CSS_SELECTOR, '[data-testid="lovd"]')
+    PHARMGKB: Locator = (By.CSS_SELECTOR, '[data-testid="pharmGKB"]')
+    PUBLICATIONS: Locator = (By.CSS_SELECTOR, '[data-testid="publications"]')
+    # Clicking the ACMG card expands the detailed Germline Variant Classification view.
+    GERMLINE_EXPAND_TOGGLE: Locator = (By.CSS_SELECTOR, '[data-testid="acmg"]')
+    # Header of the expanded detailed section.
     CLASSIFICATION_SECTION: Locator = (
         By.XPATH,
-        "//*[contains(normalize-space(.), 'Germline Variant Classification')]",
+        "//a[normalize-space()='Germline Variant Classification']",
     )
-    # VERIFY: the verdict element + its color styling.
-    VERDICT: Locator = (
-        By.XPATH,
-        "//*[contains(normalize-space(.), 'Germline Variant Classification')]"
-        "/following::*[self::span or self::div or self::h1 or self::h2 or self::h3]"
-        "[normalize-space()='Pathogenic'][1]",
-    )
+    # Verdict pill. styled-components prefix 'ColoredPill__StyledPill' is stable; the
+    # '-sc-*' suffix is not, so we match by prefix. Unique on the page. Red rendering is
+    # the pill BACKGROUND color rgb(199,7,0) (text is white) — see ResultsPage.verdict_is_red.
+    VERDICT: Locator = (By.CSS_SELECTOR, "[class*='ColoredPill__StyledPill']")

@@ -1,0 +1,114 @@
+name: CI
+
+# Run on every push and pull request, plus merges to main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Needed to publish the Allure report to GitHub Pages and to comment on PRs.
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---- Fast quality gate: lint + format ------------------------------------
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: ruff check .
+      - run: black --check .
+
+  # ---- UI tests (headed under xvfb — headless triggers reCAPTCHA) ----------
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # Chrome is preinstalled on ubuntu-latest; Selenium Manager resolves the driver.
+      - name: Run suite (headed via xvfb)
+        id: pytest
+        continue-on-error: true # keep going so the report still publishes on failure
+        env:
+          HEADLESS: "false"
+        run: xvfb-run -a pytest -m regression --reruns 2 --reruns-delay 3
+
+      - name: Upload raw reports (html + screenshots)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: reports/
+          if-no-files-found: warn
+
+      # ---- Allure report -> GitHub Pages -----------------------------------
+      - name: Load previous Allure history
+        if: always()
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+          continue-on-error: true
+
+      - name: Build Allure report (with history)
+        if: always()
+        uses: simple-elf/allure-report-action@v1.9
+        with:
+          allure_results: reports/allure-results
+          allure_history: allure-history
+          gh_pages: gh-pages
+          keep_reports: 20
+
+      - name: Publish report to GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history
+
+      # ---- Sticky PR comment with the report link + run details ------------
+      - name: Comment report link on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: allure-report
+          message: |
+            ### VarSome UI test report
+
+            | | |
+            |---|---|
+            | **Result** | ${{ steps.pytest.outcome == 'success' && '✅ passed' || '❌ failed' }} |
+            | **Report** | https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ github.run_number }}/ |
+            | **Branch** | `${{ github.head_ref }}` |
+            | **Commit** | `${{ github.sha }}` |
+            | **Environment** | ubuntu-latest · Python 3.12 · Chrome (headed/xvfb) |
+            | **Run** | [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+            | **When** | ${{ github.event.head_commit.timestamp || github.run_started_at }} |
+
+            > Note: live VarSome rate-limits anonymous users (~1 request/day/IP) and
+            > shows reCAPTCHA to datacenter IPs, so a CI run may fail on the live gate
+            > rather than a real regression. See `README.md` → Live-site obstacles.
+
+      # Reflect the real test result as the job status (after reporting ran).
+      - name: Fail job if tests failed
+        if: always() && steps.pytest.outcome != 'success'
+        run: exit 1

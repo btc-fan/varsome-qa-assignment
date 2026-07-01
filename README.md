@@ -1,17 +1,35 @@
-# VarSome — BRAF:V600E (hg38) Germline Classification Suite
+# VarSome — Germline Variant Classification Suite
 
-UI regression suite verifying that VarSome classifies the germline variant
-**BRAF:V600E (hg38)** as **Pathogenic**, after submitting defined sample
-information in the *Optional Sample Information* modal.
+UI regression suite verifying that VarSome classifies a germline variant as
+**Pathogenic**, after submitting defined sample information in the *Optional Sample
+Information* modal. The flow is data-driven: one parametrized test runs across
+scenarios (currently **BRAF:V600E** on **hg38** and **hg19**).
 
 Stack: Python 3.10+, Selenium 4 (Selenium Manager — no manual driver binary),
 pytest, Page Object Model.
 
-## Test case
+## Test cases
 
-`TC-BRAF-V600E-001` in `tests/test_braf_v600e_classification.py`. The single test
-maps 1:1 to the six documented steps; every step asserts independently so a
-failure isolates the exact stage.
+One parametrized test — `tests/test_germline_classification.py` — driven by
+`GERMLINE_SCENARIOS` in `config/test_data.py`. Each scenario maps 1:1 to the six
+documented steps; every step asserts independently so a failure isolates the exact
+stage. Adding a variant/genome is a one-row data edit — no new test code.
+
+| Case ID | Variant | Genome | Markers | Expected |
+|---------|---------|--------|---------|----------|
+| BRAF-V600E-hg38 | BRAF:V600E | hg38 | smoke, regression, germline | Pathogenic (red) |
+| BRAF-V600E-hg19 | BRAF:V600E | hg19 | regression, germline | Pathogenic (red) |
+
+### Traceability (test case → assertion → evidence)
+
+| PDF step | Automation assertion | Evidence in report |
+|----------|----------------------|--------------------|
+| 1 Launch + genome | `select_genome` then assert `genome in genome_text()` | execution log line |
+| 2 Search variant | search submitted | log + navigation |
+| 3 Modal (Germline) | assert Germline tab active → fill → submit → assert modal closed | log lines |
+| 4 Results loaded | assert General Information, Germline Classification, ClinVar, LOVD, PharmGKB, Publications present | log + html |
+| 5 Expand classification | expand + wait for section header | log |
+| 6 Verdict | assert text == "Pathogenic" **and** red pill background | log + screenshot on fail |
 
 ## Architecture
 
@@ -44,57 +62,79 @@ driver automatically — no chromedriver download step.
 ## Run
 
 ```bash
-pytest                                # full suite, headless, html+allure report
-pytest -m smoke                       # smoke marker only
-HEADLESS=false pytest                 # watch the browser
+pytest                                # full suite (headed by default — see obstacle #3)
+pytest -m smoke                       # smoke only (hg38)
+pytest -m regression                  # regression (hg38 + hg19)
 pytest -n auto                        # parallel (pytest-xdist)
 pytest --reruns 2 --reruns-delay 3    # flake guard (pytest-rerunfailures)
 ```
 
-Reports: `reports/report.html`. Allure: `allure serve reports/allure-results`.
+The suite runs **headed** by default (`HEADLESS=false` in `.env`) because headless
+triggers a reCAPTCHA wall (obstacle #3). In CI it runs headed under `xvfb`.
+
+## Reports
+
+- **HTML**: `reports/report.html` — self-contained, includes captured execution logs.
+- **Allure**: `allure serve reports/allure-results` — rich history.
+- **Screenshots**: on any test failure `conftest.py` auto-captures a screenshot to
+  `reports/screenshots/` and attaches it to the Allure report.
+- **Execution logs**: emitted live (`log_cli`) and captured into the HTML report, so
+  each step (genome select, modal fill, interstitial, verdict) is traceable per run.
 
 ## Configuration (.env)
 
 | Var | Default | Purpose |
 |-----|---------|---------|
 | BASE_URL | https://varsome.com | target |
-| GENOME | hg38 | reference build asserted in Step 2 |
+| GENOME | hg38 | default build (per-scenario genome comes from test data) |
 | BROWSER | chrome | chrome \| firefox |
 | HEADLESS | true | headed when false |
 | PAGE_LOAD_TIMEOUT | 45 | seconds |
 | EXPLICIT_WAIT | 30 | seconds |
 | WINDOW_SIZE | 1920,1080 | viewport |
 
-## Known constraint — verify locators before first run
+## Live-site obstacles & workarounds
 
-VarSome's live DOM was not crawlable from the build environment. Selectors in
-`locators/locators.py` are resilient best-effort and the blocks marked `VERIFY`
-(modal fields, verdict element) are the most likely to need a one-time
-adjustment against the real DOM. Run once headed, fix any `VERIFY` selector that
-misses, commit. Fix only in `locators/` — never inline.
+VarSome is a third-party site with anti-abuse and marketing layers that get in the
+way of automation. All locators are verified against the live DOM. The obstacles
+below are handled in code (or documented as a known limit) — they are the reason
+some design choices look the way they do.
 
-## oh-my-claudecode (OMC) execution
+### 1. Release-notes popup is inside a HubSpot iframe
+A timed "VarSome & VarSome Clinical v…" *Updates* popup appears after navigation and
+**steals keyboard focus**, which broke typing into the modal's fields. It is **not**
+in the main document — it is rendered inside `iframe[title="Popup CTA"]` (HubSpot).
+Workaround (human-style, no DOM hacks): switch into the iframe, click its close
+button `#interactive-close-button`, switch back — `BasePage.close_release_notes_popup()`.
 
-OMC is a multi-agent orchestration plugin for Claude Code. Use it to drive the
-locator-verification and first-green-run loop.
+### 2. Security-validation interstitial
+Every search submit redirects to `/security-validation/` ("you must click the button
+below before you can proceed"). Handled by waiting for and clicking `#proceedBtn`
+(`BasePage.clear_security_interstitial()`). We wait on the button, not the URL, to
+avoid a race with the redirect.
 
-Install (run each slash command separately inside Claude Code):
+### 3. reCAPTCHA blocks headless
+In **headless** Chrome the interstitial escalates to a reCAPTCHA "I'm not a robot"
+checkbox that cannot be solved programmatically. **Headed** Chrome passes it via
+browser reputation. The suite therefore runs **headed** (`HEADLESS=false`); CI runs
+headed under `xvfb`.
 
-```
-/plugin marketplace add https://github.com/Yeachan-Heo/oh-my-claudecode
-/plugin install oh-my-claudecode
-```
+### 4. Anonymous rate limit — "1 request per day"
+VarSome limits anonymous users to ~**1 result per day per IP**. After the quota is
+spent, the results page is replaced by *"To prevent abuse of the platform… Sign in to
+continue, or Join."* The test then fails on the missing results — this is the rate
+limit, **not** a code bug. Workarounds: wait for the daily reset, sign in with an
+account (planned, creds via `.env`), or request an educational whitelist.
+A VPN (NordVPN) workaround was tried and did **not** work: `curl` reaches the site but
+the Selenium-launched Chrome times out (`ERR_TIMED_OUT`) — see `TODO.md`.
 
-Then restart Claude Code and run `/oh-my-claudecode:omc-setup`.
+### Verdict rendering
+The "Pathogenic" verdict is **white text on a red pill**, not red text. The red check
+reads the pill's **background-color** (`ResultsPage.verdict_is_red()`).
 
-Drive the suite from inside a Claude Code session opened at the project root:
+## Continuous integration
 
-```
-autopilot: run the BRAF:V600E pytest suite headed, inspect any selector flagged
-VERIFY that fails to match the live varsome.com DOM, fix it in locators/locators.py
-only, and loop until the suite is green
-```
-
-`autopilot` decomposes into architect → executor → qa-tester and iterates without
-manual babysitting. For fuzzy follow-ups use `deep-interview` to force
-requirement clarification before it generates changes.
+GitHub Actions runs the suite on every push and pull request (`.github/workflows/`).
+Chrome runs headed under `xvfb`. The Allure report is published to GitHub Pages and a
+sticky comment on the PR links it, with branch, commit, and timestamp. See the CI
+section below and `TODO.md` for the account/rate-limit follow-ups.

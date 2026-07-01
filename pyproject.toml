@@ -20,8 +20,8 @@ addopts = [
 ]
 markers = [
     "smoke: minimal critical-path verification",
+    "regression: full regression coverage",
     "germline: germline classification scenarios",
-    "braf: BRAF:V600E variant scenarios",
 ]
 log_cli = true
 log_cli_level = "INFO"
