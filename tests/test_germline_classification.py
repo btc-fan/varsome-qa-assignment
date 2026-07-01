@@ -61,18 +61,11 @@ def test_germline_classification(driver, scenario: GermlineSample):
     modal.submit()
     assert modal.wait_closed(), "Sample information modal did not close after submit"
 
-    # Step 4 — results page populated with the required sections.
+    # Step 4 — results page populated with every top-panel card (spec's General
+    # Information, Germline, PharmGKB, ClinVar, LOVD, Publications are a subset).
     results = ResultsPage(driver).wait_loaded()
-    assert results.section_present(
-        ResultsLocators.GENERAL_INFORMATION
-    ), "General Information section missing"
-    assert results.section_present(
-        ResultsLocators.GERMLINE_CLASSIFICATION_CARD
-    ), "Germline Classification card missing"
-    assert results.section_present(ResultsLocators.CLINVAR), "ClinVar section missing"
-    assert results.section_present(ResultsLocators.LOVD), "LOVD section missing"
-    assert results.section_present(ResultsLocators.PHARMGKB), "PharmGKB section missing"
-    assert results.section_present(ResultsLocators.PUBLICATIONS), "Publications section missing"
+    missing = results.missing_sections(ResultsLocators.TOP_PANEL_SECTIONS)
+    assert not missing, f"Missing result sections: {missing}"
 
     # Step 5 — expand the germline classification; automated evidence rules appear.
     results.expand_germline_classification()

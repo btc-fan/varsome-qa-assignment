@@ -141,13 +141,45 @@ class ResultsLocators:
     )
     # Germline Classification card in the top info panel = the ACMG card.
     GERMLINE_CLASSIFICATION_CARD: Locator = (By.CSS_SELECTOR, '[data-testid="acmg"]')
-    # Step-4 evidence sections, anchored on stable data-testid cards.
-    CLINVAR: Locator = (By.CSS_SELECTOR, '[data-testid="clinVar"]')
-    LOVD: Locator = (By.CSS_SELECTOR, '[data-testid="lovd"]')
-    PHARMGKB: Locator = (By.CSS_SELECTOR, '[data-testid="pharmGKB"]')
-    PUBLICATIONS: Locator = (By.CSS_SELECTOR, '[data-testid="publications"]')
     # Clicking the ACMG card expands the detailed Germline Variant Classification view.
     GERMLINE_EXPAND_TOGGLE: Locator = (By.CSS_SELECTOR, '[data-testid="acmg"]')
+
+    # Every top-panel card carries a stable `<name>-card-wrapper` data-testid — the same
+    # structure for any variant/genome. We assert the cards are PRESENT (not their
+    # volatile contents, which change as source databases update). The spec's Step-4
+    # sections (General Information, Germline, PharmGKB, ClinVar, LOVD, Publications) are
+    # a subset of this list.
+    TOP_PANEL_SECTIONS: tuple[str, ...] = (
+        "variantDetails",  # General Information
+        "genes",
+        "acmg",  # Germline Classification
+        "pharmGKB",
+        "clinVar",
+        "lovd",
+        "publications",
+        "transcripts",
+        "communityContributions",
+        "frequencies",
+        "conservationScores",
+        "pathogenicityScores",  # In-Silico Predictors
+        "uniprotVariants",
+        "structuralVariants",
+        "expressionData",
+        "beaconNetwork",
+        "regionBrowser",
+        "spliceVault",  # Splicing Data
+        "mitomap",
+        "dvd",  # Deafness Variation Database
+        "omim",
+        "clinGen",
+        "gwas",
+        "proteinViewer",
+    )
+
+    @staticmethod
+    def card(section: str) -> Locator:
+        return (By.CSS_SELECTOR, f'[data-testid="{section}-card-wrapper"]')
+
     # Header of the expanded detailed section.
     CLASSIFICATION_SECTION: Locator = (
         By.XPATH,

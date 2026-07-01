@@ -30,10 +30,10 @@ class ResultsPage(BasePage):
         log.info("Results page loaded with Germline Classification card")
         return self
 
-    def section_present(self, locator) -> bool:
-        # Non-blocking presence check so a test can assert a Step-4 section is rendered
-        # without throwing when the page is still settling.
-        return bool(self.driver.find_elements(*locator))
+    def missing_sections(self, sections: tuple[str, ...]) -> list[str]:
+        # Which top-panel cards are NOT present. Non-blocking (find_elements), so the
+        # test gets the full list instead of failing on the first missing one.
+        return [s for s in sections if not self.driver.find_elements(*L.card(s))]
 
     def expand_germline_classification(self) -> None:
         self.dismiss_overlays()
