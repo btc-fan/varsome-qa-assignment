@@ -130,6 +130,3 @@ class BasePage:
 
     def css_value(self, locator: Locator, prop: str) -> str:
         return self.visible(locator).value_of_css_property(prop)
-
-    def screenshot(self, path: str) -> None:
-        self.driver.save_screenshot(path)

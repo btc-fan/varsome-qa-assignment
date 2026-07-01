@@ -36,9 +36,3 @@ class LoginPage(BasePage):
         """True while the sign-in form is still shown — i.e. login has not succeeded.
         A successful login redirects away from the form (OIDC callback)."""
         return self.is_displayed(L.FORM)
-
-    def is_error_shown(self) -> bool:
-        return self.is_displayed(L.ERROR_MESSAGE)
-
-    def error_text(self) -> str:
-        return self.text_of(L.ERROR_MESSAGE) if self.is_error_shown() else ""

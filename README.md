@@ -88,7 +88,6 @@ A single self-contained **pytest-html** report — no Java, no external services
 | Var | Default | Purpose |
 |-----|---------|---------|
 | BASE_URL | https://varsome.com | target |
-| GENOME | hg38 | default build (per-scenario genome comes from test data) |
 | BROWSER | chrome | chrome \| firefox |
 | HEADLESS | true | headed when false |
 | PAGE_LOAD_TIMEOUT | 45 | seconds |

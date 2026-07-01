@@ -24,7 +24,6 @@ def _int(name: str, default: int) -> int:
 @dataclass(frozen=True)
 class Settings:
     base_url: str = os.getenv("BASE_URL", "https://varsome.com").rstrip("/")
-    genome: str = os.getenv("GENOME", "hg38")
     # Credentials for the authenticated-login test. Empty by default; set in .env
     # (never commit). The negative login test does not need them.
     varsome_user: str = os.getenv("VARSOME_USER", "")
