@@ -48,11 +48,32 @@ jobs:
       - name: Run tests and generate HTML report
         run: |
           set +e
-          pytest -m regression --reruns 2 --reruns-delay 3
+          pytest -m regression --reruns 2 --reruns-delay 3 --junitxml=reports/junit.xml
           echo "PYTEST_EXIT_CODE=$?" >> "$GITHUB_ENV"
+
+      - name: Summarize results
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import xml.etree.ElementTree as ET
+          try:
+              s = ET.parse("reports/junit.xml").getroot()
+              s = s.find("testsuite") if s.tag == "testsuites" else s
+              total = int(s.get("tests", 0)); fail = int(s.get("failures", 0))
+              err = int(s.get("errors", 0)); skip = int(s.get("skipped", 0))
+              dur = float(s.get("time", 0.0))
+              print(f"TESTS_TOTAL={total}")
+              print(f"TESTS_PASSED={total - fail - err - skip}")
+              print(f"TESTS_FAILED={fail + err}")
+              print(f"TESTS_SKIPPED={skip}")
+              print(f"TESTS_DURATION={dur:.1f}s")
+          except Exception as exc:
+              print(f"TESTS_TOTAL=?\nTESTS_PASSED=?\nTESTS_FAILED=?\nTESTS_SKIPPED=?\nTESTS_DURATION=?  # {exc}")
+          PY
 
       - name: Upload HTML report (downloadable)
         if: always()
+        id: report_artifact
         uses: actions/upload-artifact@v4
         with:
           name: report
@@ -83,29 +104,49 @@ jobs:
         uses: actions/github-script@v7
         env:
           BRANCH_NAME: ${{ env.BRANCH_NAME }}
+          BASE_REF: ${{ github.base_ref }}
           RUN_NUMBER: ${{ github.run_number }}
           RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          ACTOR: ${{ github.actor }}
           PYTEST_EXIT_CODE: ${{ env.PYTEST_EXIT_CODE }}
+          ARTIFACT_URL: ${{ steps.report_artifact.outputs.artifact-url }}
+          T_TOTAL: ${{ env.TESTS_TOTAL }}
+          T_PASSED: ${{ env.TESTS_PASSED }}
+          T_FAILED: ${{ env.TESTS_FAILED }}
+          T_SKIPPED: ${{ env.TESTS_SKIPPED }}
+          T_DURATION: ${{ env.TESTS_DURATION }}
         with:
           script: |
-            const { BRANCH_NAME, RUN_NUMBER, RUN_ID, PYTEST_EXIT_CODE } = process.env;
+            const e = process.env;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const url = `https://${owner}.github.io/${repo}/reports/${BRANCH_NAME}/${RUN_NUMBER}/index.html`;
-            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${RUN_ID}`;
-            const passed = PYTEST_EXIT_CODE === "0";
+            const pagesUrl = `https://${owner}.github.io/${repo}/reports/${e.BRANCH_NAME}/${e.RUN_NUMBER}/index.html`;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${e.RUN_ID}`;
+            const passed = e.PYTEST_EXIT_CODE === "0";
+            const rows = [
+              ["Result", passed ? "✅ passed" : "❌ failed"],
+              ["Tests", `${e.T_PASSED} passed · ${e.T_FAILED} failed · ${e.T_SKIPPED} skipped (of ${e.T_TOTAL})`],
+              ["Duration", e.T_DURATION],
+              ["Report (Pages)", `[View HTML report](${pagesUrl})`],
+              ["Report (download)", e.ARTIFACT_URL ? `[Download report.html](${e.ARTIFACT_URL})` : "n/a"],
+              ["Repository", `\`${owner}/${repo}\``],
+              ["Branch", `\`${e.BRANCH_NAME}\`${e.BASE_REF ? ` → \`${e.BASE_REF}\`` : ""}`],
+              ["Commit", `\`${context.sha}\``],
+              ["Triggered by", `@${e.ACTOR}`],
+              ["Environment", "ubuntu-latest · Python 3.12 · Chrome (headless)"],
+              ["Run", `[#${e.RUN_NUMBER}](${runUrl}) (attempt ${e.RUN_ATTEMPT})`],
+              ["When", new Date().toUTCString()],
+            ];
             const body = [
               "### VarSome UI test report",
               "",
-              `- **Result:** ${passed ? "✅ passed" : "❌ failed"}`,
-              `- **Report:** [View HTML report](${url})`,
-              `- **Branch:** \`${BRANCH_NAME}\``,
-              `- **Commit:** \`${context.sha}\``,
-              `- **Environment:** ubuntu-latest · Python 3.12 · Chrome (headless)`,
-              `- **Run:** [#${RUN_NUMBER}](${runUrl})`,
-              `- **When:** ${new Date().toISOString()}`,
+              "| | |",
+              "|---|---|",
+              ...rows.map(([k, v]) => `| **${k}** | ${v} |`),
               "",
-              "> Live VarSome tests are skipped in CI (rate limit + reCAPTCHA).",
+              "> Live VarSome tests are skipped in CI (rate limit + reCAPTCHA); the report",
+              "> above is this run's self-contained HTML (screenshots + logs embedded).",
             ].join("\n");
             await github.rest.issues.createComment({
               owner, repo, issue_number: context.issue.number, body,
