@@ -6,11 +6,9 @@ on:
     branches: [main]
   pull_request:
 
-# Pages deploy needs pages + id-token; PR comment needs pull-requests.
+# contents: write -> push the report to the gh-pages branch. pull-requests: write -> PR comment.
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
   pull-requests: write
 
 concurrency:
@@ -31,12 +29,10 @@ jobs:
       - run: ruff check .
       - run: black --check .
 
-  # ---- UI tests + build the report site ------------------------------------
+  # ---- UI tests -> HTML report -> gh-pages + PR comment --------------------
   test:
     runs-on: ubuntu-latest
     needs: lint
-    outputs:
-      result: ${{ steps.pytest.outcome }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -52,7 +48,7 @@ jobs:
         continue-on-error: true # keep going so the report still publishes on failure
         run: pytest -m regression --reruns 2 --reruns-delay 3
 
-      # Self-contained HTML report (screenshots + logs embedded). index.html = site root.
+      # Self-contained HTML report (screenshots + logs embedded). index.html = folder root.
       - name: Build report site
         if: always()
         run: |
@@ -67,37 +63,20 @@ jobs:
           path: reports/report.html
           if-no-files-found: warn
 
-      - name: Configure Pages
+      # Publish to the gh-pages branch under a per-run folder (Pages source = branch).
+      # keep_files preserves previous runs, so every run has a permanent URL.
+      - name: Publish report to gh-pages
         if: always()
-        uses: actions/configure-pages@v5
-
-      - name: Upload Pages artifact
-        if: always()
-        uses: actions/upload-pages-artifact@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: site
-
-      - name: Fail job if tests failed
-        if: always() && steps.pytest.outcome != 'success'
-        run: exit 1
-
-  # ---- Publish the report to GitHub Pages + comment the live URL on the PR -
-  # Requires the github-pages environment to allow this branch: repo Settings ->
-  # Environments -> github-pages -> Deployment branches -> "No restriction".
-  deploy:
-    runs-on: ubuntu-latest
-    needs: test
-    if: always()
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: site
+          destination_dir: ${{ github.run_number }}
+          keep_files: true
 
       - name: Comment report link on PR
-        if: github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: test-report
@@ -107,8 +86,8 @@ jobs:
 
             | | |
             |---|---|
-            | **Result** | ${{ needs.test.outputs.result == 'success' && '✅ passed' || '❌ failed' }} |
-            | **Report** | ${{ steps.deployment.outputs.page_url }} |
+            | **Result** | ${{ steps.pytest.outcome == 'success' && '✅ passed' || '❌ failed' }} |
+            | **Report** | https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ github.run_number }}/ |
             | **Branch** | `${{ github.head_ref }}` |
             | **Commit** | `${{ github.sha }}` |
             | **Environment** | ubuntu-latest · Python 3.12 · Chrome (headless) |
@@ -117,3 +96,7 @@ jobs:
 
             > Live VarSome tests are skipped in CI (rate limit + reCAPTCHA); the report
             > above is this run's HTML report published to GitHub Pages.
+
+      - name: Fail job if tests failed
+        if: always() && steps.pytest.outcome != 'success'
+        run: exit 1
