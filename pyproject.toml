@@ -14,8 +14,6 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    "--html=reports/report.html",
-    "--self-contained-html",
     "--alluredir=reports/allure-results",
 ]
 markers = [

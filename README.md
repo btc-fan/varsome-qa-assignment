@@ -27,7 +27,7 @@ stage. Adding a variant/genome is a one-row data edit — no new test code.
 | 1 Launch + genome | `select_genome` then assert `genome in genome_text()` | execution log line |
 | 2 Search variant | search submitted | log + navigation |
 | 3 Modal (Germline) | assert Germline tab active → fill → submit → assert modal closed | log lines |
-| 4 Results loaded | assert General Information, Germline Classification, ClinVar, LOVD, PharmGKB, Publications present | log + html |
+| 4 Results loaded | assert General Information, Germline Classification, ClinVar, LOVD, PharmGKB, Publications present | log + Allure |
 | 5 Expand classification | expand + wait for section header | log |
 | 6 Verdict | assert text == "Pathogenic" **and** red pill background | log + screenshot on fail |
 
@@ -40,7 +40,7 @@ pages/       Page Objects (base, home, sample_info_modal, results)
 tests/       test cases
 utils/       webdriver factory
 conftest.py  fixtures + screenshot-on-failure hook
-reports/     html + allure output + failure screenshots (gitignored)
+reports/     allure-results + failure screenshots (gitignored)
 ```
 
 Design rules enforced in code: no `time.sleep` (explicit waits only), no inline
@@ -74,12 +74,14 @@ triggers a reCAPTCHA wall (obstacle #3). In CI it runs headed under `xvfb`.
 
 ## Reports
 
-- **HTML**: `reports/report.html` — self-contained, includes captured execution logs.
-- **Allure**: `allure serve reports/allure-results` — rich history.
+Allure is the only report.
+
+- **Allure**: `allure serve reports/allure-results` locally; in CI the static site is
+  published to GitHub Pages per run.
 - **Screenshots**: on any test failure `conftest.py` auto-captures a screenshot to
   `reports/screenshots/` and attaches it to the Allure report.
-- **Execution logs**: emitted live (`log_cli`) and captured into the HTML report, so
-  each step (genome select, modal fill, interstitial, verdict) is traceable per run.
+- **Execution logs**: emitted live (`log_cli`) so each step (genome select, modal fill,
+  interstitial, verdict) is traceable in the run output.
 
 ## Configuration (.env)
 
