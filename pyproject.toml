@@ -22,6 +22,7 @@ markers = [
     "smoke: minimal critical-path verification",
     "regression: full regression coverage",
     "germline: germline classification scenarios",
+    "login: authentication scenarios",
 ]
 log_cli = true
 log_cli_level = "INFO"
