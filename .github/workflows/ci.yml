@@ -81,13 +81,13 @@ jobs:
         if: always() && steps.pytest.outcome != 'success'
         run: exit 1
 
-  # ---- Publish latest report to GitHub Pages (main only) -------------------
-  # The github-pages environment only allows deploys from the default branch, so we
-  # deploy on push to main. PRs get the downloadable report instead (see pr-comment).
+  # ---- Publish the report to GitHub Pages + comment the live URL on the PR -
+  # Requires the github-pages environment to allow this branch: repo Settings ->
+  # Environments -> github-pages -> Deployment branches -> "No restriction".
   deploy:
     runs-on: ubuntu-latest
     needs: test
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: always()
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -96,13 +96,8 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-  # ---- Comment the result on the PR (last comment, recreated each run) -----
-  pr-comment:
-    runs-on: ubuntu-latest
-    needs: test
-    if: always() && github.event_name == 'pull_request'
-    steps:
-      - name: Comment report on PR
+      - name: Comment report link on PR
+        if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: test-report
@@ -113,13 +108,12 @@ jobs:
             | | |
             |---|---|
             | **Result** | ${{ needs.test.outputs.result == 'success' && '✅ passed' || '❌ failed' }} |
-            | **Report (download)** | [run #${{ github.run_number }} → artifact `report`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
-            | **Report (Pages)** | ${{ github.server_url }}/${{ github.repository_owner }} · published on merge to `main` |
+            | **Report** | ${{ steps.deployment.outputs.page_url }} |
             | **Branch** | `${{ github.head_ref }}` |
             | **Commit** | `${{ github.sha }}` |
             | **Environment** | ubuntu-latest · Python 3.12 · Chrome (headless) |
+            | **Run** | [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
             | **When** | ${{ github.run_started_at }} |
 
-            > Live VarSome tests are skipped in CI (rate limit + reCAPTCHA). Open the
-            > **download** artifact (self-contained HTML). The Pages site updates on
-            > merge to `main`.
+            > Live VarSome tests are skipped in CI (rate limit + reCAPTCHA); the report
+            > above is this run's HTML report published to GitHub Pages.
