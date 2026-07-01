@@ -1,14 +1,16 @@
 name: CI
 
-# Run on every push and pull request, plus merges to main.
+# Run on every push to main and on pull requests.
 on:
   push:
     branches: [main]
   pull_request:
 
-# Needed to publish the HTML report to GitHub Pages and to comment on PRs.
+# Pages deploy needs pages + id-token; PR comment needs pull-requests.
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
   pull-requests: write
 
 concurrency:
@@ -29,37 +31,35 @@ jobs:
       - run: ruff check .
       - run: black --check .
 
-  # ---- UI tests (headed under xvfb — headless triggers reCAPTCHA) ----------
+  # ---- UI tests + build the report site ------------------------------------
   test:
     runs-on: ubuntu-latest
     needs: lint
+    outputs:
+      result: ${{ steps.pytest.outcome }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-
       - run: pip install -r requirements.txt
 
-      # Chrome is preinstalled on ubuntu-latest; Selenium Manager resolves the driver.
       # Headless in CI (HEADLESS defaults true — no committed .env). The live VarSome
-      # tests are skipped here anyway; if run with an account they can go headed/xvfb.
+      # tests are skipped here anyway (rate limit + reCAPTCHA).
       - name: Run suite (headless)
         id: pytest
         continue-on-error: true # keep going so the report still publishes on failure
         run: pytest -m regression --reruns 2 --reruns-delay 3
 
-      # The HTML report is self-contained (screenshots + logs embedded). Rename it to
-      # index.html so the per-run Pages folder opens it directly.
-      - name: Prepare report site
+      # Self-contained HTML report (screenshots + logs embedded). index.html = site root.
+      - name: Build report site
         if: always()
         run: |
           mkdir -p site
           cp reports/report.html site/index.html
 
-      - name: Upload HTML report (downloadable — works regardless of Pages/domain)
+      - name: Upload HTML report (downloadable)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -67,19 +67,35 @@ jobs:
           path: reports/report.html
           if-no-files-found: warn
 
-      - name: Publish report to GitHub Pages (per-run folder)
+      - name: Configure Pages
         if: always()
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: site
-          destination_dir: ${{ github.run_number }}
-          keep_files: true
+        uses: actions/configure-pages@v5
 
-      # ---- Sticky PR comment with the report link + run details ------------
+      - name: Upload Pages artifact
+        if: always()
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Fail job if tests failed
+        if: always() && steps.pytest.outcome != 'success'
+        run: exit 1
+
+  # ---- Publish the report to GitHub Pages + comment on the PR --------------
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
       - name: Comment report link on PR
-        if: always() && github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: test-report
@@ -88,20 +104,13 @@ jobs:
 
             | | |
             |---|---|
-            | **Result** | ${{ steps.pytest.outcome == 'success' && '✅ passed' || '❌ failed' }} |
-            | **Report (Pages)** | https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ github.run_number }}/ |
-            | **Report (download)** | [artifact `report`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+            | **Result** | ${{ needs.test.outputs.result == 'success' && '✅ passed' || '❌ failed' }} |
+            | **Report** | ${{ steps.deployment.outputs.page_url }} |
             | **Branch** | `${{ github.head_ref }}` |
             | **Commit** | `${{ github.sha }}` |
             | **Environment** | ubuntu-latest · Python 3.12 · Chrome (headless) |
             | **Run** | [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
-            | **When** | ${{ github.event.head_commit.timestamp || github.run_started_at }} |
+            | **When** | ${{ github.run_started_at }} |
 
-            > If the Pages link doesn't open, use the **download** artifact (a
-            > self-contained HTML report). Live VarSome tests are skipped in CI
-            > (rate limit + reCAPTCHA) — see `README.md` → Live-site obstacles.
-
-      # Reflect the real test result as the job status (after reporting ran).
-      - name: Fail job if tests failed
-        if: always() && steps.pytest.outcome != 'success'
-        run: exit 1
+            > Live VarSome tests are skipped in CI (rate limit + reCAPTCHA). The report
+            > above is the latest run; per-run reports are also on the run's artifacts.
