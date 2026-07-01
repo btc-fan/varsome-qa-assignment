@@ -16,12 +16,12 @@ addopts = [
     "--strict-config",
     "--html=reports/report.html",
     "--self-contained-html",
-    "--alluredir=reports/allure-results",
 ]
 markers = [
     "smoke: minimal critical-path verification",
+    "regression: full regression coverage",
     "germline: germline classification scenarios",
-    "braf: BRAF:V600E variant scenarios",
+    "login: authentication scenarios",
 ]
 log_cli = true
 log_cli_level = "INFO"

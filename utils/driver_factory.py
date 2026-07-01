@@ -1,5 +1,6 @@
 """WebDriver factory. Relies on Selenium Manager (bundled in Selenium >=4.6),
 so no chromedriver/geckodriver binary needs to be installed manually."""
+
 from __future__ import annotations
 
 from selenium import webdriver
@@ -38,5 +39,7 @@ def build_driver() -> WebDriver:
         raise ValueError(f"Unsupported BROWSER='{settings.browser}'. Use chrome or firefox.")
     driver = factory()
     driver.set_page_load_timeout(settings.page_load_timeout)
-    driver.maximize_window()
+    # set_window_size is deterministic in both headed and headless=new; maximize_window
+    # falls back to 800x600 under headless (no window manager), which cramps the modal.
+    driver.set_window_size(*settings.window_size)
     return driver

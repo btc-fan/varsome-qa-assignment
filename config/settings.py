@@ -1,4 +1,5 @@
 """Centralized, environment-driven configuration. No magic numbers in test/page code."""
+
 from __future__ import annotations
 
 import os
@@ -24,6 +25,10 @@ def _int(name: str, default: int) -> int:
 class Settings:
     base_url: str = os.getenv("BASE_URL", "https://varsome.com").rstrip("/")
     genome: str = os.getenv("GENOME", "hg38")
+    # Credentials for the authenticated-login test. Empty by default; set in .env
+    # (never commit). The negative login test does not need them.
+    varsome_user: str = os.getenv("VARSOME_USER", "")
+    varsome_password: str = os.getenv("VARSOME_PASSWORD", "")
     browser: str = os.getenv("BROWSER", "chrome").lower()
     headless: bool = _bool("HEADLESS", True)
     page_load_timeout: int = _int("PAGE_LOAD_TIMEOUT", 45)

@@ -4,7 +4,6 @@ pytest-html==4.1.1
 pytest-xdist==3.6.1
 pytest-rerunfailures==15.0
 python-dotenv==1.0.1
-allure-pytest==2.13.5
 
 # lint / format gate (CLAUDE.md run gate, Phase 7 CI lint job, format hook)
 ruff==0.15.20
