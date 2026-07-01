@@ -157,3 +157,14 @@ class ResultsLocators:
     # '-sc-*' suffix is not, so we match by prefix. Unique on the page. Red rendering is
     # the pill BACKGROUND color rgb(199,7,0) (text is white) — see ResultsPage.verdict_is_red.
     VERDICT: Locator = (By.CSS_SELECTOR, "[class*='ColoredPill__StyledPill']")
+    # ACMG score of the germline classification (the "expected score" in the objective).
+    # ACMG_scores_total_score = the total (e.g. "13"); ACMG_scores = summary "13points =13P-0B".
+    SCORE_TOTAL: Locator = (By.CSS_SELECTOR, '[data-testid="ACMG_scores_total_score"]')
+    SCORE_SUMMARY: Locator = (By.CSS_SELECTOR, '[data-testid="ACMG_scores"]')
+    # Automated ACMG evidence rules (Step 5): links like PS3, PM1, PP3 — each points to
+    # the rule docs anchor (…/germline-implementation/#pp3), which isolates them from
+    # other links in the section.
+    EVIDENCE_RULES: Locator = (
+        By.CSS_SELECTOR,
+        "a[href*='germline-implementation/#']",
+    )

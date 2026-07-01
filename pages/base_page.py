@@ -123,6 +123,10 @@ class BasePage:
     def text_of(self, locator: Locator) -> str:
         return self.visible(locator).text.strip()
 
+    def texts_of(self, locator: Locator) -> list[str]:
+        """Text of every element matching the locator (non-blocking, [] if none)."""
+        return [el.text.strip() for el in self.driver.find_elements(*locator)]
+
     def scroll_into_view(self, locator: Locator) -> WebElement:
         el = self.present(locator)
         self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)

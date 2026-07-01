@@ -52,3 +52,15 @@ class ResultsPage(BasePage):
 
     def verdict_is_red(self) -> bool:
         return _is_red(self.verdict_color())
+
+    def classification_score(self) -> str:
+        # The ACMG total score (e.g. "13") — the "expected score" from the objective.
+        return self.text_of(L.SCORE_TOTAL)
+
+    def classification_interpretation(self) -> str:
+        # The ACMG summary/interpretation, e.g. "13points =13P-0B" (P = pathogenic pts).
+        return self.text_of(L.SCORE_SUMMARY)
+
+    def evidence_rules(self) -> list[str]:
+        # The automated ACMG evidence rules shown on expand (e.g. PS3, PM1, PP3).
+        return self.texts_of(L.EVIDENCE_RULES)

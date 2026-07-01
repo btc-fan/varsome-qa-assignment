@@ -74,8 +74,10 @@ def test_germline_classification(driver, scenario: GermlineSample):
     assert results.section_present(ResultsLocators.PHARMGKB), "PharmGKB section missing"
     assert results.section_present(ResultsLocators.PUBLICATIONS), "Publications section missing"
 
-    # Step 5 — expand the germline classification.
+    # Step 5 — expand the germline classification; automated evidence rules appear.
     results.expand_germline_classification()
+    rules = results.evidence_rules()
+    assert rules, "No automated ACMG evidence rules displayed after expanding"
 
     # Step 6 — verdict text AND red rendering.
     verdict = results.verdict_text()
@@ -85,3 +87,8 @@ def test_germline_classification(driver, scenario: GermlineSample):
     assert (
         results.verdict_is_red()
     ), f"Verdict '{verdict}' is not rendered in red (color={results.verdict_color()})"
+
+    # Objective — the verdict comes with the expected score + interpretation.
+    score = results.classification_score()
+    assert score.isdigit() and int(score) > 0, f"Expected a positive ACMG score, got '{score}'"
+    assert results.classification_interpretation(), "ACMG interpretation/summary is empty"
