@@ -35,6 +35,10 @@ class ResultsPage(BasePage):
         # test gets the full list instead of failing on the first missing one.
         return [s for s in sections if not self.driver.find_elements(*L.card(s))]
 
+    def card_text(self, section: str) -> str:
+        # Full text of a top-panel card, for asserting its expected content.
+        return self.text_of(L.card(section))
+
     def expand_germline_classification(self) -> None:
         self.dismiss_overlays()
         self.scroll_into_view(L.GERMLINE_CLASSIFICATION_CARD)

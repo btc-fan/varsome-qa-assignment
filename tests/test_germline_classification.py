@@ -67,6 +67,11 @@ def test_germline_classification(driver, scenario: GermlineSample):
     missing = results.missing_sections(ResultsLocators.TOP_PANEL_SECTIONS)
     assert not missing, f"Missing result sections: {missing}"
 
+    # ...and each card shows its expected stable content (identity/labels/state).
+    for section, expected in EXPECTED_CARD_CONTENT.items():
+        text = results.card_text(section)
+        assert expected in text, f"{section} card: expected '{expected}' in '{text}'"
+
     # Step 5 — expand the germline classification; automated evidence rules appear.
     results.expand_germline_classification()
     rules = results.evidence_rules()
