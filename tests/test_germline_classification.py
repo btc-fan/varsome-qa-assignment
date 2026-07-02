@@ -28,11 +28,11 @@ SCENARIO_PARAMS = [
 ]
 
 
-@pytest.mark.skip(
-    reason="Live VarSome rate-limits anonymous users by IP (~1/day) and shows reCAPTCHA "
-    "to datacenter IPs. Run locally with an account (see TODO.md). Skipped so CI is not "
-    "blocked by the live gate."
-)
+# @pytest.mark.skip(
+#     reason="Live VarSome rate-limits anonymous users by IP (~1/day) and shows reCAPTCHA "
+#     "to datacenter IPs. Run locally with an account (see TODO.md). Skipped so CI is not "
+#     "blocked by the live gate."
+# )
 @pytest.mark.germline
 @pytest.mark.parametrize("scenario", SCENARIO_PARAMS, ids=[s.case_id for s in GERMLINE_SCENARIOS])
 def test_germline_classification(driver, scenario: GermlineSample):
@@ -45,7 +45,7 @@ def test_germline_classification(driver, scenario: GermlineSample):
         s.genome in home.genome_text()
     ), f"Genome mismatch: expected '{s.genome}', UI shows '{home.genome_text()}'"
 
-    # Step 2 — initiate the variant search.
+    # Step 2 — initiate the variant searchdo.
     home.search_variant(s.variant)
 
     # Step 3 — complete the Optional Sample Information modal (germline).

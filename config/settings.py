@@ -33,6 +33,10 @@ class Settings:
     headless: bool = _bool("HEADLESS", True)
     page_load_timeout: int = _int("PAGE_LOAD_TIMEOUT", 45)
     explicit_wait: int = _int("EXPLICIT_WAIT", 30)
+    # How long to wait on page load for the HubSpot release-notes popup to appear
+    # before closing it (it can show a few seconds late). 0 = don't wait, just close
+    # if already present.
+    popup_wait: int = _int("POPUP_WAIT", 10)
     window_size: tuple[int, int] = field(
         default_factory=lambda: tuple(  # type: ignore[arg-type]
             int(x) for x in os.getenv("WINDOW_SIZE", "1920,1080").split(",")

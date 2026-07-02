@@ -96,10 +96,17 @@ class BasePage:
                 el.click()
         self.close_release_notes_popup()
 
-    def close_release_notes_popup(self) -> None:
+    def close_release_notes_popup(self, timeout: float = 0) -> None:
         """The release-notes popup is a HubSpot 'Popup CTA' iframe. Switch into it,
         click its close button like a user would, then switch back. Does nothing when
-        the popup is not present."""
+        the popup is not present. If timeout > 0, wait up to that many seconds for the
+        popup to appear first (it can show a few seconds after page load) and return
+        quietly if it never does."""
+        if timeout:
+            with contextlib.suppress(TimeoutException):
+                WebDriverWait(self.driver, timeout).until(
+                    EC.presence_of_element_located(OverlayLocators.RELEASE_NOTES_IFRAME)
+                )
         frames = self.driver.find_elements(*OverlayLocators.RELEASE_NOTES_IFRAME)
         if not frames:
             return
