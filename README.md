@@ -108,14 +108,31 @@ to `main` and every pull request:
   with the result, the report link, and the branch / commit / environment / timestamp.
   The job is marked **red** if any test fails (reporting still runs first).
 
+Each PR shows the checks by name (green/red):
+
+![PR checks](task/issues/pr_checks.png)
+
+Tests run in parallel (`-n 2` workers) with automatic reruns — from the "Run regression
+suite" step:
+
+![CI execution — parallel workers + reruns](task/issues/CI_Execution.png)
+
 ### Demo PR
 
-Branch **`demo/ci-report-failing`** carries two demonstration tests — **one passing, one
-intentionally failing** — to show the pipeline end to end: the failing run still
+Demo PR: **[#6 — CI report demo](https://github.com/btc-fan/varsome-qa-assignment/pull/6)**
+(branch `demo/ci-report-failing`). It carries two demonstration tests — **one passing,
+one intentionally failing** — to show the pipeline end to end: the failing run still
 **publishes the report** and **posts the PR comment**, and the CI job is correctly marked
-**red**. It stays open as a living demo and is not merged. The published report is hosted
-on GitHub Pages (shareable with teammates) and is also downloadable from the run's
-artifacts, so anyone can open the HTML and see the exact data used in that CI run.
+**red**. It stays open as a living demo and is not merged.
+
+The PR comment (result + shareable report link + run details):
+
+![PR report comment](task/issues/gh-report-comment-example.png)
+
+The published report is hosted on GitHub Pages (shareable with teammates) and is also
+downloadable from the run's artifacts, so anyone can open the HTML and see the exact data
+used in that CI run — e.g. this demo run:
+**[live report](https://btc-fan.github.io/varsome-qa-assignment/reports/demo/ci-report-failing/21/index.html)**.
 
 ## Issues (live prod, no test account)
 
@@ -130,7 +147,14 @@ Google reCAPTCHA "I'm not a robot" checkbox that can further demand an **image c
 hard blocker. We tick the checkbox best-effort (headed Chrome often passes on a low risk
 score), but with no test account there is no way around an image challenge.
 
-![CAPTCHA gate](task/issues/captcha_1.png)
+![CAPTCHA 1 — Proceed gate](task/issues/captcha_1.png)
+
+![CAPTCHA 2 — reCAPTCHA image challenge](task/issues/captcha_2.png)
+
+**Important — a one-time manual solve unblocks the run.** If you solve the CAPTCHA once,
+by hand, in the browser session, VarSome trusts that session and the tests then run
+through cleanly. So a practical local workflow is: run headed, solve the CAPTCHA the one
+time it appears, and let the suite continue — after that it proceeds without the gate.
 
 ### 2. IP rate limit — ~1 search result per day
 After a couple of searches the IP is throttled: VarSome returns a **"1 request per day"**
