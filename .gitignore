@@ -46,6 +46,7 @@ chromedriver.log
 
 # ---- IDE / OS ----
 .idea/
+*.iml
 .vscode/
 *.swp
 .DS_Store
@@ -57,6 +58,7 @@ Thumbs.db
 CLAUDE.md
 PLAN.md
 TODO.md
+AUDIT.md
 .mcp.json
 AGENTS.md
 .cursor/
