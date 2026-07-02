@@ -26,6 +26,7 @@ allure-results/
 allure-report/
 screenshots/
 *.png
+!task/issues/*.png
 *.log
 junit*.xml
 coverage.xml

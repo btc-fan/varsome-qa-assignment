@@ -14,6 +14,8 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
+    "-n",
+    "2",  # run tests in parallel across 2 workers (pytest-xdist); one fresh browser each
     "--html=reports/report.html",
     "--self-contained-html",
 ]

@@ -37,32 +37,32 @@ class HomeLocators:
 
 
 class SecurityValidationLocators:
-    """Anti-bot interstitial shown after submitting the search. Must click Proceed
-    to continue to the results page (reCAPTCHA-protected, but the button proceeds)."""
+    """Anti-bot gates shown after submitting the search.
+
+    Gate 1 (`/security-validation/`): a Proceed button — appears on every submit.
+    Gate 2 (`/security-validation/additional/`): a reCAPTCHA "I'm not a robot" checkbox
+    inside an iframe — intermittent. Ticking it passes only when Google's risk score is
+    low (headed real Chrome usually passes without a challenge); an image challenge
+    cannot be solved automatically.
+    """
 
     PROCEED_BUTTON: Locator = (By.ID, "proceedBtn")
+    # reCAPTCHA v2 anchor: the checkbox lives inside this iframe.
+    RECAPTCHA_IFRAME: Locator = (By.CSS_SELECTOR, 'iframe[title="reCAPTCHA"]')
+    RECAPTCHA_CHECKBOX: Locator = (By.ID, "recaptcha-anchor")
 
 
 class LoginLocators:
-    """Sign-in page (`/sign-in/`, OIDC). Form `#login-form` posts to `/auth/login/`.
-
-    URL, form and submit are verified from the served page. The username/password
-    inputs and the error banner are rendered after the OIDC step and were NOT
-    live-verifiable from this environment (Chrome could not reach the site) — they are
-    best-effort Django `/auth/login/` conventions and are marked VERIFY: confirm the
-    exact selectors against the live DOM before relying on the positive-login test.
-    """
+    """Sign-in page. `/sign-in/` redirects to the OIDC SSO at
+    `sso.varsome.com/auth/login/`; the form `#login-form` holds the email + password
+    inputs and the Login submit. All verified against the live DOM."""
 
     FORM: Locator = (By.ID, "login-form")
     SUBMIT: Locator = (By.CSS_SELECTOR, "#login-form button[type='submit']")
-    # VERIFY: Django /auth/login/ default field names; confirm live.
     USERNAME_INPUT: Locator = (By.CSS_SELECTOR, "#login-form input[name='username']")
     PASSWORD_INPUT: Locator = (By.CSS_SELECTOR, "#login-form input[name='password']")
-    # VERIFY: invalid-credentials banner; confirm the real error container live.
-    ERROR_MESSAGE: Locator = (
-        By.CSS_SELECTOR,
-        "#login-form .alert-danger, #login-form .errorlist, .alert-danger",
-    )
+    # Invalid-credentials error banner (verified live; sits outside #login-form).
+    ERROR_MESSAGE: Locator = (By.CSS_SELECTOR, "div[role='alert'].alert-danger")
 
 
 class SampleModalLocators:
@@ -141,13 +141,45 @@ class ResultsLocators:
     )
     # Germline Classification card in the top info panel = the ACMG card.
     GERMLINE_CLASSIFICATION_CARD: Locator = (By.CSS_SELECTOR, '[data-testid="acmg"]')
-    # Step-4 evidence sections, anchored on stable data-testid cards.
-    CLINVAR: Locator = (By.CSS_SELECTOR, '[data-testid="clinVar"]')
-    LOVD: Locator = (By.CSS_SELECTOR, '[data-testid="lovd"]')
-    PHARMGKB: Locator = (By.CSS_SELECTOR, '[data-testid="pharmGKB"]')
-    PUBLICATIONS: Locator = (By.CSS_SELECTOR, '[data-testid="publications"]')
     # Clicking the ACMG card expands the detailed Germline Variant Classification view.
     GERMLINE_EXPAND_TOGGLE: Locator = (By.CSS_SELECTOR, '[data-testid="acmg"]')
+
+    # Every top-panel card carries a stable `<name>-card-wrapper` data-testid — the same
+    # structure for any variant/genome. We assert the cards are PRESENT (not their
+    # volatile contents, which change as source databases update). The spec's Step-4
+    # sections (General Information, Germline, PharmGKB, ClinVar, LOVD, Publications) are
+    # a subset of this list.
+    TOP_PANEL_SECTIONS: tuple[str, ...] = (
+        "variantDetails",  # General Information
+        "genes",
+        "acmg",  # Germline Classification
+        "pharmGKB",
+        "clinVar",
+        "lovd",
+        "publications",
+        "transcripts",
+        "communityContributions",
+        "frequencies",
+        "conservationScores",
+        "pathogenicityScores",  # In-Silico Predictors
+        "uniprotVariants",
+        "structuralVariants",
+        "expressionData",
+        "beaconNetwork",
+        "regionBrowser",
+        "spliceVault",  # Splicing Data
+        "mitomap",
+        "dvd",  # Deafness Variation Database
+        "omim",
+        "clinGen",
+        "gwas",
+        "proteinViewer",
+    )
+
+    @staticmethod
+    def card(section: str) -> Locator:
+        return (By.CSS_SELECTOR, f'[data-testid="{section}-card-wrapper"]')
+
     # Header of the expanded detailed section.
     CLASSIFICATION_SECTION: Locator = (
         By.XPATH,
@@ -157,3 +189,14 @@ class ResultsLocators:
     # '-sc-*' suffix is not, so we match by prefix. Unique on the page. Red rendering is
     # the pill BACKGROUND color rgb(199,7,0) (text is white) — see ResultsPage.verdict_is_red.
     VERDICT: Locator = (By.CSS_SELECTOR, "[class*='ColoredPill__StyledPill']")
+    # ACMG score of the germline classification (the "expected score" in the objective).
+    # ACMG_scores_total_score = the total (e.g. "13"); ACMG_scores = summary "13points =13P-0B".
+    SCORE_TOTAL: Locator = (By.CSS_SELECTOR, '[data-testid="ACMG_scores_total_score"]')
+    SCORE_SUMMARY: Locator = (By.CSS_SELECTOR, '[data-testid="ACMG_scores"]')
+    # Automated ACMG evidence rules (Step 5): links like PS3, PM1, PP3 — each points to
+    # the rule docs anchor (…/germline-implementation/#pp3), which isolates them from
+    # other links in the section.
+    EVIDENCE_RULES: Locator = (
+        By.CSS_SELECTOR,
+        "a[href*='germline-implementation/#']",
+    )

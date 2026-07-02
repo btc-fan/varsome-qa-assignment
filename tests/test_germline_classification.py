@@ -1,87 +1,61 @@
-"""Germline variant classification on VarSome.
+"""Germline variant classification on VarSome (TC-BRAF-V600E-001).
 
-One data-driven case parametrized over GERMLINE_SCENARIOS. Each scenario verifies a
-germline variant reaches its expected verdict (rendered red) after the Optional Sample
-Information submission. Maps 1:1 to the six documented steps; each step carries its own
-assertion so a failure pinpoints the exact stage that broke.
+Confirms a germline variant is classified as its expected verdict (in red) with a
+score, interpretation and evidence rules, after submitting the Optional Sample
+Information. Data-driven over GERMLINE_SCENARIOS (BRAF:V600E on hg38 and hg19).
+
+The test reads as the six documented steps: each line is one action or one check,
+all logic lives in the page objects, and every step logs what it did.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from config.test_data import GERMLINE_SCENARIOS, GermlineSample
+from config.test_data import EXPECTED_CARD_CONTENT, GERMLINE_SCENARIOS, GermlineSample
 from locators.locators import ResultsLocators
 from pages.home_page import HomePage
 from pages.results_page import ResultsPage
 from pages.sample_info_modal import SampleInfoModal
 
 SCENARIO_PARAMS = [
-    pytest.param(
-        GERMLINE_SCENARIOS[0],
-        marks=(pytest.mark.smoke, pytest.mark.regression),
-    ),
-    pytest.param(
-        GERMLINE_SCENARIOS[1],
-        marks=(pytest.mark.regression,),
-    ),
+    pytest.param(GERMLINE_SCENARIOS[0], marks=(pytest.mark.smoke, pytest.mark.regression)),
+    pytest.param(GERMLINE_SCENARIOS[1], marks=(pytest.mark.regression,)),
 ]
 
 
-@pytest.mark.skip(
-    reason="Live VarSome rate-limits anonymous users by IP (~1/day) and shows reCAPTCHA "
-    "to datacenter IPs. Run locally with an account (see TODO.md). Skipped so CI is not "
-    "blocked by the live gate."
-)
 @pytest.mark.germline
 @pytest.mark.parametrize("scenario", SCENARIO_PARAMS, ids=[s.case_id for s in GERMLINE_SCENARIOS])
 def test_germline_classification(driver, scenario: GermlineSample):
-    s = scenario
-
-    # Step 1 — launch + select the genome build, then confirm the UI reflects it.
+    # Step 1 — launch VarSome and select the reference genome build.
     home = HomePage(driver).load()
-    home.select_genome(s.genome)
-    assert (
-        s.genome in home.genome_text()
-    ), f"Genome mismatch: expected '{s.genome}', UI shows '{home.genome_text()}'"
+    home.select_genome(scenario.genome)
+    assert home.shows_genome(scenario.genome), f"Genome is not set to {scenario.genome}"
 
-    # Step 2 — initiate the variant search.
-    home.search_variant(s.variant)
+    # Step 2 — search for the variant.
+    home.search_variant(scenario.variant)
 
-    # Step 3 — complete the Optional Sample Information modal (germline).
+    # Step 3 — complete the Optional Sample Information (Germline) modal and submit.
     modal = SampleInfoModal(driver).wait_until_open()
-    assert modal.is_germline_tab_active(), "Germline tab is not active on modal open"
-    modal.fill_germline_form(
-        phenotype_query=s.phenotype_query,
-        phenotype_option=s.phenotype_option,
-        sex=s.sex,
-        age_at_onset=s.age_at_onset,
-        ethnicity=s.ethnicity,
-    )
+    assert modal.is_germline_tab_active(), "Germline tab is not selected"
+    modal.fill_germline_form(scenario)
     modal.submit()
     assert modal.wait_closed(), "Sample information modal did not close after submit"
 
-    # Step 4 — results page populated with the required sections.
+    # Step 4 — the results page shows every information card, each with its content.
     results = ResultsPage(driver).wait_loaded()
-    assert results.section_present(
-        ResultsLocators.GENERAL_INFORMATION
-    ), "General Information section missing"
-    assert results.section_present(
-        ResultsLocators.GERMLINE_CLASSIFICATION_CARD
-    ), "Germline Classification card missing"
-    assert results.section_present(ResultsLocators.CLINVAR), "ClinVar section missing"
-    assert results.section_present(ResultsLocators.LOVD), "LOVD section missing"
-    assert results.section_present(ResultsLocators.PHARMGKB), "PharmGKB section missing"
-    assert results.section_present(ResultsLocators.PUBLICATIONS), "Publications section missing"
+    missing_cards = results.missing_sections(ResultsLocators.TOP_PANEL_SECTIONS)
+    assert not missing_cards, f"Result cards missing: {missing_cards}"
+    wrong_cards = results.cards_missing_expected_content(EXPECTED_CARD_CONTENT)
+    assert not wrong_cards, f"Result cards with unexpected content: {wrong_cards}"
 
-    # Step 5 — expand the germline classification.
+    # Step 5 — expand the Germline Classification; automated evidence rules appear.
     results.expand_germline_classification()
+    assert results.has_evidence_rules(), "No automated ACMG evidence rules displayed"
 
-    # Step 6 — verdict text AND red rendering.
-    verdict = results.verdict_text()
-    assert (
-        verdict == s.expected_verdict
-    ), f"Verdict mismatch: expected '{s.expected_verdict}', got '{verdict}'"
-    assert (
-        results.verdict_is_red()
-    ), f"Verdict '{verdict}' is not rendered in red (color={results.verdict_color()})"
+    # Step 6 — the verdict is the expected classification, shown in red, with a
+    # score and interpretation.
+    assert results.verdict_is(scenario.expected_verdict), "Unexpected classification verdict"
+    assert results.verdict_is_red(), "Verdict is not rendered in red"
+    assert results.has_positive_score(), "ACMG score is missing or not positive"
+    assert results.has_interpretation(), "ACMG interpretation is empty"
