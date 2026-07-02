@@ -1,11 +1,12 @@
 """Pipeline / report demonstration tests — NOT product tests.
 
-These exist ONLY to exercise the CI pipeline and the HTML report end-to-end (a
-passing case and a failing case) without depending on the live VarSome site, which is
-IP rate-limited. They prove that:
-  - the report renders both passed and failed outcomes, and
-  - the CI job goes RED when a test fails (the "Fail job if tests failed" gate).
-Remove them once the live suite can run in CI. See README / TODO.md.
+Used by the demo PR (branch `demo/ci-report-failing`) to exercise the CI pipeline and
+the HTML report end-to-end without depending on the live VarSome site (which is IP
+rate-limited). One test passes and one fails on purpose, to show that:
+  - the report renders both passed and failed outcomes,
+  - the failing run still publishes a report + posts the PR comment, and
+  - the CI job is marked RED when any test fails (the "Fail job if tests failed" gate).
+Not merged to main — this branch stays open as a living demo. See README → CI.
 """
 
 import pytest
