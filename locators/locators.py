@@ -53,25 +53,16 @@ class SecurityValidationLocators:
 
 
 class LoginLocators:
-    """Sign-in page (`/sign-in/`, OIDC). Form `#login-form` posts to `/auth/login/`.
-
-    URL, form and submit are verified from the served page. The username/password
-    inputs and the error banner are rendered after the OIDC step and were NOT
-    live-verifiable from this environment (Chrome could not reach the site) — they are
-    best-effort Django `/auth/login/` conventions and are marked VERIFY: confirm the
-    exact selectors against the live DOM before relying on the positive-login test.
-    """
+    """Sign-in page. `/sign-in/` redirects to the OIDC SSO at
+    `sso.varsome.com/auth/login/`; the form `#login-form` holds the email + password
+    inputs and the Login submit. All verified against the live DOM."""
 
     FORM: Locator = (By.ID, "login-form")
     SUBMIT: Locator = (By.CSS_SELECTOR, "#login-form button[type='submit']")
-    # VERIFY: Django /auth/login/ default field names; confirm live.
     USERNAME_INPUT: Locator = (By.CSS_SELECTOR, "#login-form input[name='username']")
     PASSWORD_INPUT: Locator = (By.CSS_SELECTOR, "#login-form input[name='password']")
-    # VERIFY: invalid-credentials banner; confirm the real error container live.
-    ERROR_MESSAGE: Locator = (
-        By.CSS_SELECTOR,
-        "#login-form .alert-danger, #login-form .errorlist, .alert-danger",
-    )
+    # Invalid-credentials error banner (verified live; sits outside #login-form).
+    ERROR_MESSAGE: Locator = (By.CSS_SELECTOR, "div[role='alert'].alert-danger")
 
 
 class SampleModalLocators:

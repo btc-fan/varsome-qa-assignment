@@ -6,6 +6,7 @@ import logging
 
 from selenium.webdriver.support import expected_conditions as EC
 
+from config.test_data import GermlineSample
 from locators.locators import SampleModalLocators as L
 from pages.base_page import BasePage
 
@@ -40,27 +41,22 @@ class SampleInfoModal(BasePage):
         # next field. Click a neutral spot to blur the control and close the menu.
         self.click(L.MODAL_TITLE)
 
-    def fill_germline_form(
-        self,
-        phenotype_query: str,
-        phenotype_option: str,
-        sex: str,
-        age_at_onset: str,
-        ethnicity: str,
-    ) -> None:
+    def fill_germline_form(self, sample: GermlineSample) -> None:
         # Phenotype is an async react-select: must type to load options.
-        self._react_select(L.PHENOTYPE_CONTROL, phenotype_option, query=phenotype_query)
+        self._react_select(
+            L.PHENOTYPE_CONTROL, sample.phenotype_option, query=sample.phenotype_query
+        )
         # Sex / Ethnicity are static react-selects: open and click the option.
-        self._react_select(L.SEX_CONTROL, sex)
+        self._react_select(L.SEX_CONTROL, sample.sex)
         # Age at onset is a plain text input.
-        self.type(L.AGE_INPUT, age_at_onset)
-        self._react_select(L.ETHNICITY_CONTROL, ethnicity)
+        self.type(L.AGE_INPUT, sample.age_at_onset)
+        self._react_select(L.ETHNICITY_CONTROL, sample.ethnicity)
         log.info(
             "Filled germline form: phenotype='%s', sex='%s', age='%s', ethnicity='%s'",
-            phenotype_option,
-            sex,
-            age_at_onset,
-            ethnicity,
+            sample.phenotype_option,
+            sample.sex,
+            sample.age_at_onset,
+            sample.ethnicity,
         )
 
     def submit(self) -> None:

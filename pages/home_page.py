@@ -27,8 +27,10 @@ class HomePage(BasePage):
         self.click(L.genome_option(genome))
         log.info("Selected genome '%s'", genome)
 
-    def genome_text(self) -> str:
-        return self.text_of(L.GENOME_SELECTOR)
+    def shows_genome(self, genome: str) -> bool:
+        shown = self.text_of(L.GENOME_SELECTOR)
+        log.info("Genome shown: '%s' (expected '%s')", shown, genome)
+        return genome in shown
 
     def search_variant(self, variant: str) -> None:
         self.type(L.SEARCH_INPUT, variant)

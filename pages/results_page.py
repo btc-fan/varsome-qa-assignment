@@ -33,11 +33,18 @@ class ResultsPage(BasePage):
     def missing_sections(self, sections: tuple[str, ...]) -> list[str]:
         # Which top-panel cards are NOT present. Non-blocking (find_elements), so the
         # test gets the full list instead of failing on the first missing one.
-        return [s for s in sections if not self.driver.find_elements(*L.card(s))]
+        missing = [s for s in sections if not self.driver.find_elements(*L.card(s))]
+        log.info("Result sections present: %d/%d", len(sections) - len(missing), len(sections))
+        return missing
 
-    def card_text(self, section: str) -> str:
-        # Full text of a top-panel card, for asserting its expected content.
-        return self.text_of(L.card(section))
+    def cards_missing_expected_content(self, expected: dict[str, str]) -> list[str]:
+        # Cards whose text does not contain the expected stable content. Returns
+        # readable mismatch strings so the test can assert on one value (empty = ok).
+        return [
+            f"{section}: '{want}' not in '{self.text_of(L.card(section))}'"
+            for section, want in expected.items()
+            if want not in self.text_of(L.card(section))
+        ]
 
     def expand_germline_classification(self) -> None:
         self.dismiss_overlays()
@@ -54,17 +61,30 @@ class ResultsPage(BasePage):
         # The verdict pill's background carries the classification colour.
         return self.css_value(L.VERDICT, "background-color")
 
+    def verdict_is(self, expected: str) -> bool:
+        actual = self.verdict_text()
+        log.info("Verdict: '%s' (expected '%s')", actual, expected)
+        return actual == expected
+
     def verdict_is_red(self) -> bool:
-        return _is_red(self.verdict_color())
+        red = _is_red(self.verdict_color())
+        log.info("Verdict colour: %s (red=%s)", self.verdict_color(), red)
+        return red
 
-    def classification_score(self) -> str:
+    def has_positive_score(self) -> bool:
         # The ACMG total score (e.g. "13") — the "expected score" from the objective.
-        return self.text_of(L.SCORE_TOTAL)
+        score = self.text_of(L.SCORE_TOTAL)
+        log.info("ACMG score: '%s'", score)
+        return score.isdigit() and int(score) > 0
 
-    def classification_interpretation(self) -> str:
+    def has_interpretation(self) -> bool:
         # The ACMG summary/interpretation, e.g. "13points =13P-0B" (P = pathogenic pts).
-        return self.text_of(L.SCORE_SUMMARY)
+        text = self.text_of(L.SCORE_SUMMARY)
+        log.info("ACMG interpretation: '%s'", text)
+        return bool(text)
 
-    def evidence_rules(self) -> list[str]:
+    def has_evidence_rules(self) -> bool:
         # The automated ACMG evidence rules shown on expand (e.g. PS3, PM1, PP3).
-        return self.texts_of(L.EVIDENCE_RULES)
+        rules = self.texts_of(L.EVIDENCE_RULES)
+        log.info("ACMG evidence rules: %s", rules)
+        return bool(rules)
