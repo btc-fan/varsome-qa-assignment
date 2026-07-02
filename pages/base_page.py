@@ -96,17 +96,11 @@ class BasePage:
                 el.click()
         self.close_release_notes_popup()
 
-    def close_release_notes_popup(self, timeout: float = 0) -> None:
-        """The release-notes popup is a HubSpot 'Popup CTA' iframe. Switch into it,
-        click its close button like a user would, then switch back. Does nothing when
-        the popup is not present. If timeout > 0, wait up to that many seconds for the
-        popup to appear first (it can show a few seconds after page load) and return
-        quietly if it never does."""
-        if timeout:
-            with contextlib.suppress(TimeoutException):
-                WebDriverWait(self.driver, timeout).until(
-                    EC.presence_of_element_located(OverlayLocators.RELEASE_NOTES_IFRAME)
-                )
+    def close_release_notes_popup(self) -> None:
+        """The release-notes popup is a HubSpot 'Popup CTA' iframe. It is blocked at the
+        network level (see driver_factory), so it normally never appears; this stays as
+        a cheap reactive backup: if the iframe is present, switch in, click its close
+        button, switch back. Non-blocking — does nothing when the popup is absent."""
         frames = self.driver.find_elements(*OverlayLocators.RELEASE_NOTES_IFRAME)
         if not frames:
             return
@@ -120,12 +114,36 @@ class BasePage:
 
     def clear_security_interstitial(self) -> None:
         """Every search submit lands on the anti-bot '/security-validation/' page.
-        Wait for its Proceed button and click it to continue to the results page.
-        Waiting on the button (not the URL) avoids the race where this runs before the
-        redirect has happened."""
+        Wait for its Proceed button and click it to continue. Waiting on the button
+        (not the URL) avoids the race where this runs before the redirect has happened.
+        Some submits then add a second gate (reCAPTCHA) — handled next."""
         log.info("Passing security validation interstitial")
         self.dismiss_overlays()
         self.click(SecurityValidationLocators.PROCEED_BUTTON)
+        self.solve_recaptcha_if_present()
+
+    def solve_recaptcha_if_present(self) -> None:
+        """Intermittent second gate: '/security-validation/additional/' shows a
+        reCAPTCHA 'I'm not a robot' checkbox in an iframe. After Proceed we land on
+        either that page or the results page, so wait for the URL to settle, and only
+        if it's the '/additional/' gate switch into the reCAPTCHA iframe and tick the
+        checkbox. Best-effort: passes when Google returns a low-risk score (no image
+        challenge); an image challenge cannot be solved automatically."""
+        with contextlib.suppress(TimeoutException):
+            self.wait.until(
+                lambda d: "/additional/" in d.current_url or "/variant/" in d.current_url
+            )
+        if "/additional/" not in self.driver.current_url:
+            return
+        frames = self.driver.find_elements(*SecurityValidationLocators.RECAPTCHA_IFRAME)
+        if not frames:
+            return
+        log.info("reCAPTCHA checkbox detected; clicking 'I'm not a robot'")
+        self.driver.switch_to.frame(frames[0])
+        try:
+            self.click(SecurityValidationLocators.RECAPTCHA_CHECKBOX)
+        finally:
+            self.driver.switch_to.default_content()
 
     def text_of(self, locator: Locator) -> str:
         return self.visible(locator).text.strip()

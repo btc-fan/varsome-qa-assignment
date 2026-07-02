@@ -20,6 +20,11 @@ def _chrome() -> WebDriver:
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--disable-gpu")
     opts.add_argument("--lang=en-US")
+    # Blackhole HubSpot at the DNS level so the "Popup CTA" release-notes iframe never
+    # loads — kills the focus-stealing popup at the source (no waiting/closing needed).
+    opts.add_argument(
+        "--host-resolver-rules=MAP *hs-sites.com ~NOTFOUND,MAP *hs-scripts.com ~NOTFOUND"
+    )
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
     return webdriver.Chrome(options=opts)
 

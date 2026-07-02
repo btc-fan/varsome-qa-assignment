@@ -109,17 +109,20 @@ in the main document — it is rendered inside `iframe[title="Popup CTA"]` (HubS
 Workaround (human-style, no DOM hacks): switch into the iframe, click its close
 button `#interactive-close-button`, switch back — `BasePage.close_release_notes_popup()`.
 
-### 2. Security-validation interstitial
-Every search submit redirects to `/security-validation/` ("you must click the button
-below before you can proceed"). Handled by waiting for and clicking `#proceedBtn`
-(`BasePage.clear_security_interstitial()`). We wait on the button, not the URL, to
-avoid a race with the redirect.
+### 2. Security-validation interstitials (two gates)
+Every search submit redirects to `/security-validation/` ("click the button below to
+proceed"). Handled by clicking `#proceedBtn` (`BasePage.clear_security_interstitial()`),
+waiting on the button (not the URL) to avoid a redirect race.
+Some submits then add a **second, intermittent** gate — `/security-validation/additional/`
+— with a reCAPTCHA "I'm not a robot" checkbox inside `iframe[title="reCAPTCHA"]`.
+`BasePage.solve_recaptcha_if_present()` waits for the URL to settle and, only if it's the
+`/additional/` gate, switches into the iframe and ticks `#recaptcha-anchor`.
 
-### 3. reCAPTCHA blocks headless
-In **headless** Chrome the interstitial escalates to a reCAPTCHA "I'm not a robot"
-checkbox that cannot be solved programmatically. **Headed** Chrome passes it via
-browser reputation. The suite therefore runs **headed** (`HEADLESS=false`); CI runs
-headed under `xvfb`.
+### 3. reCAPTCHA is best-effort
+Ticking the checkbox passes only when Google returns a low risk score — **headed** real
+Chrome usually passes without a challenge (so the suite runs `HEADLESS=false`; CI uses
+`xvfb`). If Google escalates to an image challenge it **cannot** be solved
+programmatically; that run fails at the gate (documented, not a code bug).
 
 ### 4. Anonymous rate limit — "1 request per day"
 VarSome limits anonymous users to ~**1 result per day per IP**. After the quota is

@@ -37,10 +37,19 @@ class HomeLocators:
 
 
 class SecurityValidationLocators:
-    """Anti-bot interstitial shown after submitting the search. Must click Proceed
-    to continue to the results page (reCAPTCHA-protected, but the button proceeds)."""
+    """Anti-bot gates shown after submitting the search.
+
+    Gate 1 (`/security-validation/`): a Proceed button — appears on every submit.
+    Gate 2 (`/security-validation/additional/`): a reCAPTCHA "I'm not a robot" checkbox
+    inside an iframe — intermittent. Ticking it passes only when Google's risk score is
+    low (headed real Chrome usually passes without a challenge); an image challenge
+    cannot be solved automatically.
+    """
 
     PROCEED_BUTTON: Locator = (By.ID, "proceedBtn")
+    # reCAPTCHA v2 anchor: the checkbox lives inside this iframe.
+    RECAPTCHA_IFRAME: Locator = (By.CSS_SELECTOR, 'iframe[title="reCAPTCHA"]')
+    RECAPTCHA_CHECKBOX: Locator = (By.ID, "recaptcha-anchor")
 
 
 class LoginLocators:

@@ -16,10 +16,7 @@ log = logging.getLogger(__name__)
 class HomePage(BasePage):
     def load(self) -> HomePage:
         self.open(settings.base_url)
-        # Accept cookies, then wait a few seconds for the HubSpot release-notes popup
-        # (it can appear a moment after load) and close it before interacting.
         self.dismiss_overlays()
-        self.close_release_notes_popup(timeout=settings.popup_wait)
         self.visible(L.SEARCH_INPUT)
         log.info("Homepage loaded")
         return self
