@@ -1,51 +1,65 @@
 # VarSome — Germline Variant Classification Suite
 
-UI regression suite verifying that VarSome classifies a germline variant as
-**Pathogenic**, after submitting defined sample information in the *Optional Sample
-Information* modal. The flow is data-driven: one parametrized test runs across
-scenarios (currently **BRAF:V600E** on **hg38** and **hg19**).
+UI automation for the QA task in [`task/`](task/) — *"Verification of Germline Variant
+Classification for BRAF:V600E (hg38)"*. It confirms that VarSome classifies the germline
+variant **BRAF:V600E** as **Pathogenic** (in red), with the expected **score** and
+**interpretation**, after submitting defined sample information in the *Optional Sample
+Information* modal and opening the detailed results page.
 
-Stack: Python 3.10+, Selenium 4 (Selenium Manager — no manual driver binary),
-pytest, Page Object Model.
+The full specification (six steps + expected results) is the PDF in [`task/`](task/).
 
-## Test cases
+## Tech stack
 
-One parametrized test — `tests/test_germline_classification.py` — driven by
-`GERMLINE_SCENARIOS` in `config/test_data.py`. Each scenario maps 1:1 to the six
-documented steps; every step asserts independently so a failure isolates the exact
-stage. Adding a variant/genome is a one-row data edit — no new test code.
+- **Python 3.10+**, **Selenium 4** (Selenium Manager — no manual driver binary)
+- **pytest** + **pytest-xdist** (parallel) + **pytest-html** (report) + **pytest-rerunfailures**
+- **Page Object Model**, `ruff` + `black` quality gate, GitHub Actions CI
 
-| Case ID | Variant | Genome | Markers | Expected |
-|---------|---------|--------|---------|----------|
-| BRAF-V600E-hg38 | BRAF:V600E | hg38 | smoke, regression, germline | Pathogenic (red) |
-| BRAF-V600E-hg19 | BRAF:V600E | hg19 | regression, germline | Pathogenic (red) |
+## How it's built (the good parts)
 
-### Traceability (test case → assertion → evidence)
+- **Page Object Model** — pages expose behaviour and return values; selectors live only
+  in `locators/locators.py`; data in `config/test_data.py`; config in `config/settings.py`.
+- **Tests read like a story.** No control flow in test bodies (no `for`/`if`/try) — each
+  step is one readable line a non-technical person can follow, and every step logs what
+  it did, so a run reads like a narrative. All logic lives in page methods.
+- **No fixed waits.** Only dynamic `WebDriverWait` + `expected_conditions` — never
+  `time.sleep`, never implicit waits. Waits are on concrete post-conditions.
+- **Isolated + parallel.** One fresh browser per test, no shared state, so tests run in
+  parallel across **N workers** (`-n 2` by default; also in CI) via pytest-xdist.
+- **Parametrized + tagged.** One data-driven test runs every scenario; markers
+  (`smoke`, `regression`, `germline`, `login`) allow selective runs — a fast `-m smoke`
+  gate or a full `-m regression`. Adding a variant/genome is a one-row edit in
+  `GERMLINE_SCENARIOS`.
 
-| PDF step | Automation assertion | Evidence in report |
-|----------|----------------------|--------------------|
-| 1 Launch + genome | `select_genome` then assert `genome in genome_text()` | execution log line |
-| 2 Search variant | search submitted | log + navigation |
-| 3 Modal (Germline) | assert Germline tab active → fill → submit → assert modal closed | log lines |
-| 4 Results loaded | assert General Information, Germline Classification, ClinVar, LOVD, PharmGKB, Publications present | log + HTML report |
-| 5 Expand classification | expand + wait for section header | log |
-| 6 Verdict | assert text == "Pathogenic" **and** red pill background | log + screenshot on fail |
+## Tests
 
-## Architecture
+| Test (id) | Tags | Scope | Runs? |
+|-----------|------|-------|-------|
+| `test_germline_classification[BRAF-V600E-hg38]` | smoke, regression, germline | Core happy path — the task's six steps end to end | Yes (may fail on live gates — see Issues) |
+| `test_germline_classification[BRAF-V600E-hg19]` | regression, germline | Same flow on the hg19 build (genome coverage) | Yes (may fail on live gates) |
+| `test_login_rejects_invalid_credentials` | login, regression | Negative auth — invalid creds rejected + exact error banner asserted | **Yes, always** (login page isn't rate-limited) |
+| `test_login_with_valid_credentials` | login | Positive auth — valid creds sign in | **Skipped** unless `VARSOME_USER` / `VARSOME_PASSWORD` are set in `.env` |
 
-```
-config/      settings (env-driven) + scenario data
-locators/    all selectors, single source of truth
-pages/       Page Objects (base, home, sample_info_modal, results)
-tests/       test cases
-utils/       webdriver factory
-conftest.py  fixtures + screenshot-on-failure hook
-reports/     report.html + failure screenshots (gitignored)
-```
+**Why some don't always pass / are skipped**
+- The positive login test is `skipif` — it needs a real account; we don't commit
+  credentials, so it runs only when you supply them via `.env`.
+- The germline tests are **not** skipped, but on repeated runs / datacenter IPs they can
+  fail at VarSome's anti-bot gates (reCAPTCHA image challenge, or the "1 request per day"
+  limit). That's a live-site constraint, not a test defect — see **Issues** below.
 
-Design rules enforced in code: no `time.sleep` (explicit waits only), no inline
-selectors (all in `locators/`), no hardcoded config (all in `config/settings.py`
-via `.env`), screenshot auto-captured on any failure.
+### What the germline test does (maps 1:1 to the task steps)
+
+1. Launch VarSome and **select the genome build** (hg38 / hg19); assert the UI reflects it.
+2. **Search** for `BRAF:V600E`.
+3. Complete the **Optional Sample Information** modal (Germline): assert the Germline tab
+   is active, fill Phenotype = *Cancer (MONDO:0004992)*, Sex = *Female*, Age = *60*,
+   Ethnicity = *East Asian*, submit; assert the modal closes.
+4. On the results page, assert **all 24 information cards** are present (General
+   Information, Germline Classification, ClinVar, LOVD, PharmGKB, Publications, …) and
+   each shows its expected stable content.
+5. **Expand** the Germline Classification; assert the automated ACMG evidence rules
+   (PS3, PM1, PP3, …) appear.
+6. Assert the verdict is **Pathogenic**, rendered **red** (the pill's red background),
+   with a positive ACMG **score** and a non-empty **interpretation**.
 
 ## Setup
 
@@ -56,90 +70,91 @@ pip install -r requirements.txt
 cp .env.example .env                  # adjust if needed
 ```
 
-Chrome or Firefox must be installed on the host. Selenium Manager resolves the
-driver automatically — no chromedriver download step.
+Chrome or Firefox must be installed. Selenium Manager resolves the driver automatically.
 
 ## Run
 
 ```bash
-pytest                                # full suite (headed by default — see obstacle #3)
+pytest                                # full suite, 2 parallel workers (default)
 pytest -m smoke                       # smoke only (hg38)
-pytest -m regression                  # regression (hg38 + hg19)
-pytest -n auto                        # parallel (pytest-xdist)
-pytest --reruns 2 --reruns-delay 3    # flake guard (pytest-rerunfailures)
+pytest -m regression                  # regression (hg38 + hg19 + login-negative)
+pytest -m login                       # auth tests
+pytest -n 4                           # more parallel workers
 ```
 
-The suite runs **headed** by default (`HEADLESS=false` in `.env`) because headless
-triggers a reCAPTCHA wall (obstacle #3). In CI it runs headed under `xvfb`.
+Runs **headed** by default (`HEADLESS=false` in `.env`) because headless triggers the
+reCAPTCHA gate (see Issues); CI runs headless.
 
-## Reports
+## Report
 
 A single self-contained **pytest-html** report — no Java, no external services.
 
-- **HTML**: `reports/report.html` — self-contained (open the file directly). In CI it
-  is published to GitHub Pages per run and uploaded as a downloadable artifact.
-- **Screenshots**: on any test failure `conftest.py` captures a screenshot and embeds
-  it inline (base64) in the HTML report; a copy is also saved to `reports/screenshots/`.
-- **Execution logs**: `log_cli` streams each step (genome select, modal fill,
-  interstitial, verdict) into the run output and the report.
-
-## Configuration (.env)
-
-| Var | Default | Purpose |
-|-----|---------|---------|
-| BASE_URL | https://varsome.com | target |
-| GENOME | hg38 | default build (per-scenario genome comes from test data) |
-| BROWSER | chrome | chrome \| firefox |
-| HEADLESS | true | headed when false |
-| PAGE_LOAD_TIMEOUT | 45 | seconds |
-| EXPLICIT_WAIT | 30 | seconds |
-| WINDOW_SIZE | 1920,1080 | viewport |
-
-## Live-site obstacles & workarounds
-
-VarSome is a third-party site with anti-abuse and marketing layers that get in the
-way of automation. All locators are verified against the live DOM. The obstacles
-below are handled in code (or documented as a known limit) — they are the reason
-some design choices look the way they do.
-
-### 1. Release-notes popup is inside a HubSpot iframe
-A timed "VarSome & VarSome Clinical v…" *Updates* popup appears after navigation and
-**steals keyboard focus**, which broke typing into the modal's fields. It is **not**
-in the main document — it is rendered inside `iframe[title="Popup CTA"]` (HubSpot).
-Workaround (human-style, no DOM hacks): switch into the iframe, click its close
-button `#interactive-close-button`, switch back — `BasePage.close_release_notes_popup()`.
-
-### 2. Security-validation interstitials (two gates)
-Every search submit redirects to `/security-validation/` ("click the button below to
-proceed"). Handled by clicking `#proceedBtn` (`BasePage.clear_security_interstitial()`),
-waiting on the button (not the URL) to avoid a redirect race.
-Some submits then add a **second, intermittent** gate — `/security-validation/additional/`
-— with a reCAPTCHA "I'm not a robot" checkbox inside `iframe[title="reCAPTCHA"]`.
-`BasePage.solve_recaptcha_if_present()` waits for the URL to settle and, only if it's the
-`/additional/` gate, switches into the iframe and ticks `#recaptcha-anchor`.
-
-### 3. reCAPTCHA is best-effort
-Ticking the checkbox passes only when Google returns a low risk score — **headed** real
-Chrome usually passes without a challenge (so the suite runs `HEADLESS=false`; CI uses
-`xvfb`). If Google escalates to an image challenge it **cannot** be solved
-programmatically; that run fails at the gate (documented, not a code bug).
-
-### 4. Anonymous rate limit — "1 request per day"
-VarSome limits anonymous users to ~**1 result per day per IP**. After the quota is
-spent, the results page is replaced by *"To prevent abuse of the platform… Sign in to
-continue, or Join."* The test then fails on the missing results — this is the rate
-limit, **not** a code bug. Workarounds: wait for the daily reset, sign in with an
-account (planned, creds via `.env`), or request an educational whitelist.
-A VPN (NordVPN) workaround was tried and did **not** work: `curl` reaches the site but
-the Selenium-launched Chrome times out (`ERR_TIMED_OUT`) — see `TODO.md`.
-
-### Verdict rendering
-The "Pathogenic" verdict is **white text on a red pill**, not red text. The red check
-reads the pill's **background-color** (`ResultsPage.verdict_is_red()`).
+- **`reports/report.html`** — self-contained; open the file directly.
+- **Failure evidence**: on the failing step, `conftest.py` captures a **screenshot** and
+  embeds it **inline** in the report, alongside the **full execution logs** (`log_cli`)
+  — so you see exactly what happened and what data was used.
+- **From CI**: the same HTML is uploaded as a **downloadable artifact** and published to
+  **GitHub Pages** per run. Download the HTML to inspect the exact data used in that CI
+  run for debugging, or share the Pages link with teammates.
 
 ## Continuous integration
 
-GitHub Actions runs the suite on every push and pull request (`.github/workflows/`).
-Tests run headless. The HTML report is published to GitHub Pages per run and uploaded
-as a downloadable artifact; a sticky PR comment links both, with branch, commit, and
-timestamp. See `TODO.md` for the account/rate-limit follow-ups.
+GitHub Actions — workflow **VarSome UI Regression** (`.github/workflows/ci.yml`), on push
+to `main` and every pull request:
+
+- **quality-gate** — `ruff check` + `black --check`.
+- **ui-tests** — install, run the regression suite (headless), build the HTML report,
+  upload it as an artifact, publish it to the `gh-pages` branch, and post a **PR comment**
+  with the result, the report link, and the branch / commit / environment / timestamp.
+  The job is marked **red** if any test fails (reporting still runs first).
+
+### Demo PR
+
+Branch **`demo/ci-report-failing`** carries two demonstration tests — **one passing, one
+intentionally failing** — to show the pipeline end to end: the failing run still
+**publishes the report** and **posts the PR comment**, and the CI job is correctly marked
+**red**. It stays open as a living demo and is not merged. The published report is hosted
+on GitHub Pages (shareable with teammates) and is also downloadable from the run's
+artifacts, so anyone can open the HTML and see the exact data used in that CI run.
+
+## Issues (live prod, no test account)
+
+We test against **production** VarSome as an anonymous user, so we hit every defensive
+mechanism a real bot would. These are the reasons a run can fail when repeated:
+
+### 1. CAPTCHA — sometimes a click, sometimes a hard block
+After submitting the search there's a security gate. Usually it's **CAPTCHA 1**: a single
+*Proceed* button we click. But intermittently CAPTCHA 1 escalates to **CAPTCHA 2**, a
+Google reCAPTCHA "I'm not a robot" checkbox that can further demand an **image challenge**
+(*"select all buses"*). An image challenge **cannot** be solved by automation — it is a
+hard blocker. We tick the checkbox best-effort (headed Chrome often passes on a low risk
+score), but with no test account there is no way around an image challenge.
+
+![CAPTCHA gate](task/issues/captcha_1.png)
+
+### 2. IP rate limit — ~1 search result per day
+After a couple of searches the IP is throttled: VarSome returns a **"1 request per day"**
+banner instead of results. In practice only the **first** search-based test can pass per
+day/IP; subsequent search tests fail on the missing results (not a code bug).
+
+![One request per day](task/issues/one_request_per_day_banner.png)
+
+### 3. Can't register a test user — company-email only
+To bypass the rate limit we tried creating an account, but registration **only accepts
+company email domains** — a personal email is rejected. A dedicated testing email would
+solve issues #1 and #2 (authenticated users skip the anti-bot gates and get a higher
+quota). We accept this is production, not a test environment — fine for a home assignment.
+
+![Registration domain restriction](task/issues/unable_to_register_due_to_domain_not_being_accepted.png)
+
+## Things to improve (next)
+
+- **Authenticated run**: a company/test account removes the reCAPTCHA + rate-limit gates,
+  making the germline tests reliable and unattended in CI (login page objects are ready).
+- **Negative / discriminating variant**: assert a known **Benign** variant is *not*
+  Pathogenic / not red — proves the suite detects wrong verdicts, not just green paths.
+- **Cross-browser**: add Firefox to the matrix (the driver factory already supports it).
+- **Richer failure evidence**: also attach page source + browser console/network logs.
+- **More assertions / areas**: exact ACMG score/points and specific evidence rules per
+  variant; ClinVar star rating and significance; frequency values within tolerances;
+  the left-blank modal fields staying empty; deep-linking straight to a variant URL.
